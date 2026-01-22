@@ -17,6 +17,3 @@ ForgeOps is a local-first, open-source DevOps automation CLI tool built in Pytho
 
 All commands operate locally and do not require internet access.
 
-## Why This Matters for Open Source
-
-ForgeOps empowers open-source developers by providing essential DevOps tools that work offline, ensuring privacy, security, and accessibility. It promotes self-reliance in development workflows, reducing dependencies on cloud services and fostering a more decentralized approach to software automation.
