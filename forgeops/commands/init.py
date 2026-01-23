@@ -10,3 +10,14 @@ def init_project(project_name: str):
   if project_path.exists(): 
     typer.echo(f"Project '{project_name}' already exists.") 
     return
+
+project_path.mkdir()
+os.chdir(project_path)
+
+# Generate Dockerfile
+write_file("Dockerfile", get_dockerfile())
+
+# Generate .gitignore
+write_file(".gitignore", get_gitignore())
+
+typer.echo(f"Project '{project_name}' initialized successfully.")
