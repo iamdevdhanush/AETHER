@@ -1,0 +1,24 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+    <qresource prefix="/">
+        <file>ui/qml/Main.qml</file>
+        <file>ui/qml/Splash.qml</file>
+        <file>ui/qml/Home.qml</file>
+        <file>ui/qml/Chat.qml</file>
+        <file>ui/qml/Sidebar.qml</file>
+        <file>ui/qml/TopBar.qml</file>
+        <file>ui/qml/CommandInput.qml</file>
+        <file>ui/qml/AICore.qml</file>
+        <file>ui/qml/ExecutionTimeline.qml</file>
+        <file>ui/qml/QuickActions.qml</file>
+        <file>ui/qml/Projects.qml</file>
+        <file>ui/qml/Plugins.qml</file>
+        <file>ui/qml/SystemMonitor.qml</file>
+        <file>ui/qml/Settings.qml</file>
+        <file>ui/qml/GlassPanel.qml</file>
+        <file>ui/qml/GlassButton.qml</file>
+        <file>ui/qml/GlassCard.qml</file>
+        <file>ui/qml/ConversationList.qml</file>
+        <file>ui/qml/Dashboard.qml</file>
+    </qresource>
+</RCC>

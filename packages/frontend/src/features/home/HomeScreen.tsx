@@ -2,8 +2,6 @@ import { useState, useEffect, useRef, type FormEvent } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { AICore } from '@/components/core/AICore'
 import { GlassPanel } from '@/components/glass/GlassPanel'
-import { GlassCard } from '@/components/glass/GlassCard'
-import { GlassInput } from '@/components/glass/GlassInput'
 import { useAICoreStore } from '@/stores/ai-core-store'
 import { useSystemStore } from '@/stores/system-store'
 import { useChatStore } from '@/stores/chat-store'
@@ -23,9 +21,7 @@ function Waveform() {
         <motion.div
           key={i}
           className="w-[2px] bg-aether-accent/60 rounded-full"
-          animate={{
-            height: [4, Math.random() * 24 + 4, 4],
-          }}
+          animate={{ height: [4, Math.random() * 24 + 4, 4] }}
           transition={{
             duration: 0.8 + Math.random() * 0.4,
             repeat: Infinity,
@@ -55,12 +51,8 @@ function Greeting() {
       transition={{ duration: 0.8, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
       className="text-center mt-8"
     >
-      <h1 className="text-3xl font-thin tracking-wide text-aether-primary">
-        {greeting}, Sir.
-      </h1>
-      <p className="text-sm text-aether-secondary mt-2 font-medium tracking-wide">
-        How may I assist you today?
-      </p>
+      <h1 className="text-3xl font-thin tracking-wide text-aether-primary">{greeting}, Sir.</h1>
+      <p className="text-sm text-aether-secondary mt-2 font-medium tracking-wide">How may I assist you today?</p>
     </motion.div>
   )
 }
@@ -87,6 +79,7 @@ function SystemHealthPanel() {
       <HealthCard label="GPU" value={`${metrics.gpu.usage}%`} sub={`${metrics.gpu.temperature}°C`} />
       <HealthCard label="RAM" value={`${metrics.ram.percentage}%`} sub={`${Math.round(metrics.ram.used / 1024 / 1024 / 1024)}GB`} />
       <HealthCard label="Disk" value={`${metrics.disk.percentage}%`} sub={`${Math.round(metrics.disk.used / 1024 / 1024 / 1024)}GB`} />
+      <HealthCard label="Battery" value={`${metrics.battery.percentage}%`} sub={metrics.battery.charging ? 'Charging' : ''} />
       <div className="border-t border-white/5 mt-3 pt-3">
         <HealthCard label="Model" value={metrics.model.name} color="text-aether-primary" />
         <HealthCard label="Latency" value={`${metrics.model.latency}ms`} />
@@ -105,12 +98,7 @@ function RecentConversations() {
     <GlassPanel className="w-full">
       <div className="flex items-center justify-between mb-3">
         <h4 className="text-[10px] uppercase tracking-widest text-aether-secondary/50">Conversations</h4>
-        <button
-          onClick={createConversation}
-          className="text-[10px] text-aether-accent hover:text-aether-primary transition-colors"
-        >
-          + New
-        </button>
+        <button onClick={createConversation} className="text-[10px] text-aether-accent hover:text-aether-primary transition-colors">+ New</button>
       </div>
       <div className="space-y-1">
         {conversations.slice(0, 5).map((conv) => (
@@ -122,9 +110,31 @@ function RecentConversations() {
             {conv.title}
           </button>
         ))}
-        {conversations.length === 0 && (
-          <p className="text-xs text-aether-secondary/40 py-2">No conversations yet</p>
-        )}
+        {conversations.length === 0 && <p className="text-xs text-aether-secondary/40 py-2">No conversations yet</p>}
+      </div>
+    </GlassPanel>
+  )
+}
+
+function RunningTasks() {
+  return (
+    <GlassPanel className="w-full">
+      <h4 className="text-[10px] uppercase tracking-widest text-aether-secondary/50 mb-2">Running Tasks</h4>
+      <p className="text-xs text-aether-secondary/40 py-2">No active tasks</p>
+    </GlassPanel>
+  )
+}
+
+function QuickActions() {
+  return (
+    <GlassPanel className="w-full">
+      <h4 className="text-[10px] uppercase tracking-widest text-aether-secondary/50 mb-2">Quick Actions</h4>
+      <div className="space-y-1">
+        {['Take Screenshot', 'System Status', 'Open Terminal'].map((action) => (
+          <button key={action} className="w-full text-left text-xs text-aether-secondary hover:text-aether-primary py-1.5 transition-colors">
+            {action}
+          </button>
+        ))}
       </div>
     </GlassPanel>
   )
@@ -141,15 +151,8 @@ export function HomeScreen() {
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
     if (!input.trim() || isStreaming) return
-
     createConversation()
-    addMessage({
-      id: crypto.randomUUID(),
-      role: 'user',
-      content: input.trim(),
-      timestamp: Date.now(),
-    })
-
+    addMessage({ id: crypto.randomUUID(), role: 'user', content: input.trim(), timestamp: Date.now() })
     setState('thinking')
     setInput('')
   }
@@ -165,22 +168,11 @@ export function HomeScreen() {
           className="w-56 flex flex-col gap-4 pt-12"
         >
           <RecentConversations />
-          <GlassPanel className="w-full">
-            <h4 className="text-[10px] uppercase tracking-widest text-aether-secondary/50 mb-2">Quick Actions</h4>
-            <div className="space-y-1">
-              {['Take Screenshot', 'System Status', 'Open Terminal'].map((action) => (
-                <button
-                  key={action}
-                  className="w-full text-left text-xs text-aether-secondary hover:text-aether-primary py-1.5 transition-colors"
-                >
-                  {action}
-                </button>
-              ))}
-            </div>
-          </GlassPanel>
+          <RunningTasks />
+          <QuickActions />
         </motion.div>
 
-        {/* Center area */}
+        {/* Center — AI workspace */}
         <div className="flex-1 flex flex-col items-center justify-center">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
@@ -194,7 +186,6 @@ export function HomeScreen() {
             <Waveform />
           </AnimatePresence>
 
-          {/* Input */}
           <motion.form
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -215,18 +206,17 @@ export function HomeScreen() {
                 type="submit"
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                className="w-8 h-8 rounded-full bg-aether-accent/20 flex items-center justify-center text-aether-accent hover:bg-aether-accent/30 transition-colors"
+                className="w-8 h-8 rounded-full bg-aether-accent/20 flex items-center justify-center text-aether-accent hover:bg-aether-accent/30 transition-colors shrink-0"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M22 2L11 13" />
-                  <path d="M22 2L15 22L11 13L2 9L22 2Z" />
+                  <path d="M22 2L11 13" /><path d="M22 2L15 22L11 13L2 9L22 2Z" />
                 </svg>
               </motion.button>
             </div>
           </motion.form>
         </div>
 
-        {/* Right panel - System health */}
+        {/* Right panel — System health */}
         <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}

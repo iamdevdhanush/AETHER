@@ -8,8 +8,8 @@ export function ChevronDown({ size = 16 }: { size?: number }) {
 
 export function ArrowUp({ size = 16 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <path d="M12 19V5M12 5L5 12M12 5L19 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none">
+      <path d="M8 12V4M8 4L4 8M8 4L12 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }
@@ -18,8 +18,6 @@ export function Sparkle({ size = 16 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="none">
       <path d="M8 0L9.5 5.5L15 7L9.5 8.5L8 14L6.5 8.5L1 7L6.5 5.5L8 0Z" fill="currentColor" />
-      <path d="M14 10L14.5 12.5L17 13L14.5 13.5L14 16L13.5 13.5L11 13L13.5 12.5L14 10Z" fill="currentColor" opacity="0.6" />
-      <path d="M3 10L3.5 11.5L5 12L3.5 12.5L3 14L2.5 12.5L1 12L2.5 11.5L3 10Z" fill="currentColor" opacity="0.6" />
     </svg>
   )
 }
@@ -87,25 +85,64 @@ export function MemoryIcon({ size = 16 }: { size?: number }) {
   )
 }
 
-export function StatusDot({ size = 6, color = '#00D27A' }: { size?: number; color?: string }) {
+export function TerminalIcon({ size = 16 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 6 6" fill="none">
-      <circle cx="3" cy="3" r="3" fill={color} />
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none">
+      <path d="M3 4L7 8L3 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M9 12H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
   )
 }
 
-export function AILogo({ size = 28 }: { size?: number }) {
+export function BrowserIcon({ size = 16 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 28 28" fill="none">
-      <circle cx="14" cy="14" r="13" stroke="url(#ailogo)" strokeWidth="1.5" />
-      <circle cx="14" cy="14" r="5" fill="url(#ailogo)" />
-      <defs>
-        <linearGradient id="ailogo" x1="0" y1="0" x2="28" y2="28">
-          <stop stopColor="#A8D8FF" />
-          <stop offset="1" stopColor="#FFFFFF" />
-        </linearGradient>
-      </defs>
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none">
+      <rect x="1.5" y="3" width="13" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M1.5 6.5H14.5" stroke="currentColor" strokeWidth="1.2" />
+      <circle cx="4" cy="5" r="0.8" fill="currentColor" />
+      <circle cx="5.5" cy="5" r="0.8" fill="currentColor" />
+    </svg>
+  )
+}
+
+export function SettingsIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none">
+      <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M8 1.5V3M8 13V14.5M1.5 8H3M13 8H14.5M3.5 3.5L4.5 4.5M11.5 11.5L12.5 12.5M12.5 3.5L11.5 4.5M4.5 11.5L3.5 12.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function PowerIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none">
+      <path d="M8 1V8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M12 3.5C13.5 5 14.5 7 14.5 9.5C14.5 13 11.5 15.5 8 15.5C4.5 15.5 1.5 13 1.5 9.5C1.5 7 2.5 5 4 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export function FolderIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none">
+      <path d="M1.5 4.5V12.5C1.5 13.3 2.2 14 3 14H13C13.8 14 14.5 13.3 14.5 12.5V6C14.5 5.2 13.8 4.5 13 4.5H8L6.5 3H3C2.2 3 1.5 3.7 1.5 4.5Z" stroke="currentColor" strokeWidth="1.2" />
+    </svg>
+  )
+}
+
+export function PinIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none">
+      <path d="M10 1L15 6L11 7L9 9L8 13L6 10L3 8L7 7L9 5L10 1Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+export function StatusDot({ size = 6, color = '#00D27A' }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 6 6" fill="none">
+      <circle cx="3" cy="3" r="3" fill={color} />
     </svg>
   )
 }
