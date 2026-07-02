@@ -1,0 +1,16 @@
+{
+  "name": "aether",
+  "private": true,
+  "version": "0.1.0",
+  "description": "The Intelligence Behind Your Computer",
+  "scripts": {
+    "dev": "npm run dev:frontend",
+    "dev:frontend": "npm run dev -w packages/frontend",
+    "dev:backend": "cd packages/backend && python -m uvicorn app.main:app --reload --port 8000",
+    "build": "npm run build -w packages/frontend",
+    "install:all": "npm install && cd packages/backend && pip install -r requirements.txt"
+  },
+  "workspaces": [
+    "packages/frontend"
+  ]
+}
