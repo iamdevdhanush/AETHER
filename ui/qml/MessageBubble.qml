@@ -181,7 +181,6 @@ Item {
                 selectedTextColor: root.themeObj.bg
                 selectionColor: root.themeObj.accent
                 textFormat: TextEdit.PlainText
-                background: null
 
                 // Smooth content updates
                 Behavior on text {
