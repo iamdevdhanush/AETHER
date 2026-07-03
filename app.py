@@ -52,6 +52,7 @@ def main():
 
     # Launch AETHER
     aether = AetherApplication(app, PROJECT_ROOT)
+    app.aboutToQuit.connect(aether.cleanup)
     aether.launch()
 
     sys.exit(app.exec())

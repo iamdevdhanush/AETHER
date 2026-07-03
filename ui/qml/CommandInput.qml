@@ -12,6 +12,13 @@ Rectangle {
     signal executePlugin(string name, string payload)
 
     property bool isProcessing: false
+    property var plugins: [
+        { icon: "⌨️", name: "terminal",   tip: "Terminal" },
+        { icon: "📁", name: "filesystem",  tip: "Files" },
+        { icon: "💻", name: "vscode",      tip: "VS Code" },
+        { icon: "🌐", name: "browser",     tip: "Browser" },
+        { icon: "▶️", name: "executor",    tip: "Run Code" },
+    ]
 
     function setProcessing(val) {
         isProcessing = val
@@ -38,24 +45,18 @@ Rectangle {
             spacing: 4
 
             Repeater {
-                model: [
-                    { icon: "⌨️", name: "terminal",   tip: "Terminal" },
-                    { icon: "📁", name: "filesystem",  tip: "Files" },
-                    { icon: "💻", name: "vscode",      tip: "VS Code" },
-                    { icon: "🌐", name: "browser",     tip: "Browser" },
-                    { icon: "▶️", name: "executor",    tip: "Run Code" },
-                ]
+                model: root.plugins
                 delegate: ToolButton {
                     implicitWidth: 30
                     implicitHeight: 30
                     ToolTip.visible: hovered
-                    ToolTip.text: modelData.tip
+                    ToolTip.text: root.plugins[index].tip
                     onClicked: {
-                        root.executePlugin(modelData.name, inputField.text)
+                        root.executePlugin(root.plugins[index].name, inputField.text)
                         inputField.clear()
                     }
                     contentItem: Text {
-                        text: modelData.icon
+                        text: root.plugins[index].icon
                         font.pixelSize: 14
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter

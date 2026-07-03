@@ -97,7 +97,7 @@ Rectangle {
             delegate: Rectangle {
                 width: convList.width
                 height: 56
-                color: model.id === root.activeConversationId
+                color: conversationModel.get(index).id === root.activeConversationId
                     ? root.themeObj.bgSelected
                     : convHover.containsMouse ? root.themeObj.bgHover : "transparent"
                 radius: root.themeObj.radiusSm
@@ -111,19 +111,20 @@ Rectangle {
                     spacing: 2
 
                     Text {
-                        text: model.title || "New Conversation"
-                        color: model.id === root.activeConversationId
+                        text: conversationModel.get(index).title || "New Conversation"
+                        color: conversationModel.get(index).id === root.activeConversationId
                             ? root.themeObj.textPrimary
                             : root.themeObj.textSec
                         font.pixelSize: 13
-                        font.weight: model.id === root.activeConversationId
+                        font.weight: conversationModel.get(index).id === root.activeConversationId
                             ? Font.Medium : Font.Normal
                         elide: Text.ElideRight
                         Layout.fillWidth: true
                     }
 
                     Text {
-                        text: model.updated_at ? model.updated_at.substring(0, 10) : ""
+                        text: conversationModel.get(index).updated_at
+                            ? conversationModel.get(index).updated_at.substring(0, 10) : ""
                         color: root.themeObj.textMuted
                         font.pixelSize: 10
                     }
@@ -137,7 +138,7 @@ Rectangle {
                     height: 30
                     radius: 2
                     color: root.themeObj.accent
-                    visible: model.id === root.activeConversationId
+                    visible: conversationModel.get(index).id === root.activeConversationId
                 }
 
                 MouseArea {
@@ -145,8 +146,8 @@ Rectangle {
                     anchors.fill: parent
                     hoverEnabled: true
                     onClicked: {
-                        root.activeConversationId = model.id
-                        root.conversationSelected(model.id)
+                        root.activeConversationId = conversationModel.get(index).id
+                        root.conversationSelected(conversationModel.get(index).id)
                     }
                 }
             }

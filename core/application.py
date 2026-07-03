@@ -141,9 +141,19 @@ class AetherApplication(QObject):
     def cleanup(self):
         """Graceful shutdown."""
         logger.info("AETHER shutting down...")
+        if self.bridge:
+            self.bridge.cleanup()
         if self.plugin_manager:
             self.plugin_manager.shutdown_all()
         if self.system_monitor:
             self.system_monitor.stop()
+        if self.ollama:
+            import asyncio
+            try:
+                loop = asyncio.new_event_loop()
+                loop.run_until_complete(self.ollama.close())
+                loop.close()
+            except Exception:
+                pass
         if self.db:
             self.db.close()

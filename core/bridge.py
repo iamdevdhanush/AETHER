@@ -327,6 +327,18 @@ class QMLBridge(QObject):
     def currentConversationId(self) -> str:
         return self._current_conversation_id or ""
 
+    def cleanup(self):
+        """Shut down workers, timers, and connections."""
+        self._stats_timer.stop()
+        # Wait for all active workers to finish
+        for worker in list(self._active_workers):
+            if worker.isRunning():
+                worker.quit()
+                if not worker.wait(3000):
+                    worker.terminate()
+                    worker.wait()
+        self._active_workers.clear()
+
     @Slot(result=str)
     def currentModel(self) -> str:
         return self.ollama.current_model
