@@ -1,73 +1,171 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
+import QtQuick.Layouts 1.15
 
 Rectangle {
     id: root
-    height: 52
-    radius: 28
-    color: "#08FFFFFF"
-    border.color: "#0FFFFFFF"
-    border.width: 1
+    color: themeObj.bgPanel
 
-    signal messageSent(string text)
+    required property var themeObj
 
-    Row {
+    signal sendMessage(string text)
+    signal executePlugin(string name, string payload)
+
+    property bool isProcessing: false
+
+    function setProcessing(val) {
+        isProcessing = val
+    }
+
+    // Connect bridge streaming states
+    Connections {
+        target: bridge
+        function onStreamChunk(chunk) { root.isProcessing = true }
+        function onStreamComplete()   { root.isProcessing = false }
+        function onStreamError(err)   { root.isProcessing = false }
+    }
+
+    RowLayout {
         anchors.fill: parent
-        anchors.leftMargin: 24
-        anchors.rightMargin: 6
-        anchors.topMargin: 6
-        anchors.bottomMargin: 6
-        spacing: 12
+        anchors.leftMargin: 16
+        anchors.rightMargin: 12
+        anchors.topMargin: 12
+        anchors.bottomMargin: 12
+        spacing: 8
 
-        TextInput {
-            id: inputField
-            anchors.verticalCenter: parent.verticalCenter
-            width: parent.width - 60
-            color: "#FFFFFF"
-            font.pixelSize: 14
-            font.family: "Inter"
-            clip: true
-            focus: true
+        // Plugin quick-launch buttons
+        RowLayout {
+            spacing: 4
 
-            Text {
-                anchors.fill: parent
-                text: "Ask AETHER anything..."
-                color: "#66FFFFFF"
-                font: parent.font
-                visible: !inputField.text.length && !inputField.focus
+            Repeater {
+                model: [
+                    { icon: "⌨️", name: "terminal",   tip: "Terminal" },
+                    { icon: "📁", name: "filesystem",  tip: "Files" },
+                    { icon: "💻", name: "vscode",      tip: "VS Code" },
+                    { icon: "🌐", name: "browser",     tip: "Browser" },
+                    { icon: "▶️", name: "executor",    tip: "Run Code" },
+                ]
+                delegate: ToolButton {
+                    implicitWidth: 30
+                    implicitHeight: 30
+                    ToolTip.visible: hovered
+                    ToolTip.text: modelData.tip
+                    onClicked: {
+                        root.executePlugin(modelData.name, inputField.text)
+                        inputField.clear()
+                    }
+                    contentItem: Text {
+                        text: modelData.icon
+                        font.pixelSize: 14
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    background: Rectangle {
+                        color: parent.hovered ? root.themeObj.bgHover : root.themeObj.bgCard
+                        radius: root.themeObj.radiusSm
+                        border.color: root.themeObj.border
+                        border.width: 1
+                    }
+                }
             }
-
-            Keys.onReturnPressed: sendMessage()
         }
 
+        // Vertical divider
         Rectangle {
-            anchors.verticalCenter: parent.verticalCenter
-            width: 32
+            width: 1
             height: 32
-            radius: 16
-            color: "#1AA8D8FF"
+            color: root.themeObj.border
+        }
 
+        // Text input
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            color: root.themeObj.bgCard
+            radius: root.themeObj.radius
+            border.width: inputField.activeFocus ? 1 : 1
+            border.color: inputField.activeFocus
+                ? root.themeObj.accent
+                : root.themeObj.border
+
+            Behavior on border.color {
+                ColorAnimation { duration: 150 }
+            }
+
+            ScrollView {
+                anchors.fill: parent
+                anchors.margins: 1
+                clip: true
+
+                TextArea {
+                    id: inputField
+                    placeholderText: "Ask AETHER anything... (Shift+Enter for newline)"
+                    color: root.themeObj.textPrimary
+                    placeholderTextColor: root.themeObj.textMuted
+                    font.pixelSize: 14
+                    wrapMode: TextArea.Wrap
+                    background: null
+                    padding: 10
+                    topPadding: 10
+                    bottomPadding: 10
+
+                    Keys.onPressed: (event) => {
+                        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                            if (event.modifiers & Qt.ShiftModifier) {
+                                // Allow newline
+                            } else {
+                                event.accepted = true
+                                root._submit()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Send button
+        Rectangle {
+            implicitWidth: 42
+            implicitHeight: 42
+            radius: root.themeObj.radius
+            color: root.isProcessing ? root.themeObj.accentDim
+                 : sendHover.containsMouse ? root.themeObj.accentGlow
+                 : root.themeObj.accent
+
+            Behavior on color {
+                ColorAnimation { duration: 120 }
+            }
+
+            // Spinner or send icon
             Text {
                 anchors.centerIn: parent
-                text: "→"
-                color: "#A8D8FF"
-                font.pixelSize: 14
+                text: root.isProcessing ? "⏸" : "↑"
+                color: "white"
+                font.pixelSize: 18
                 font.weight: Font.Bold
             }
 
+            SequentialAnimation on opacity {
+                loops: Animation.Infinite
+                running: root.isProcessing
+                NumberAnimation { to: 0.6; duration: 600 }
+                NumberAnimation { to: 1.0; duration: 600 }
+            }
+
             MouseArea {
+                id: sendHover
                 anchors.fill: parent
+                hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                onClicked: sendMessage()
+                onClicked: root._submit()
             }
         }
     }
 
-    function sendMessage() {
+    function _submit() {
         var text = inputField.text.trim()
-        if (text.length > 0) {
-            root.messageSent(text)
-            inputField.text = ""
-        }
+        if (text.length === 0 || root.isProcessing) return
+        inputField.clear()
+        root.sendMessage(text)
     }
 }

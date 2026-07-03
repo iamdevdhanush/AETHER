@@ -1,114 +1,208 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
+import QtQuick.Layouts 1.15
 
 Rectangle {
     id: root
-    height: 48
-    color: "#04FFFFFF"
-    border.color: "#0FFFFFFF"
-    border.width: 1
+    color: themeObj.bgPanel
 
-    Row {
-        anchors.left: parent.left
-        anchors.leftMargin: 20
-        anchors.verticalCenter: parent.verticalCenter
-        spacing: 16
+    required property var themeObj
+    property string statusText: "Ready"
+    property real cpuPercent: 0
+    property real memPercent: 0
+
+    signal toggleSidebar()
+    signal toggleTimeline()
+    signal toggleSettings()
+    signal toggleMemory()
+
+    function updateStats(stats) {
+        cpuPercent = stats.cpu ? stats.cpu.percent : 0
+        memPercent = stats.memory ? stats.memory.percent : 0
+        cpuBar.value = cpuPercent / 100
+        memBar.value = memPercent / 100
+    }
+
+    function setStatus(msg) {
+        statusText = msg
+        statusLabel.text = msg
+        statusFadeTimer.restart()
+    }
+
+    Timer {
+        id: statusFadeTimer
+        interval: 4000
+        onTriggered: statusLabel.text = "Ready"
+    }
+
+    RowLayout {
+        anchors.fill: parent
+        anchors.leftMargin: 12
+        anchors.rightMargin: 12
+        spacing: 8
+
+        // ── Left: Logo + Sidebar toggle ───────────────────────────────
+        ToolButton {
+            id: sidebarToggle
+            implicitWidth: 36
+            implicitHeight: 36
+            onClicked: root.toggleSidebar()
+            ToolTip.visible: hovered
+            ToolTip.text: "Toggle Sidebar"
+            contentItem: Text {
+                text: "☰"
+                color: root.themeObj.textSec
+                font.pixelSize: 18
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
+            background: Rectangle {
+                color: parent.hovered ? root.themeObj.bgHover : "transparent"
+                radius: root.themeObj.radiusSm
+            }
+        }
 
         Text {
             text: "AETHER"
-            color: "#FFFFFF"
+            color: root.themeObj.textPrimary
             font.pixelSize: 15
-            font.weight: Font.DemiBold
-            font.family: "Schibsted Grotesk"
-            anchors.verticalCenter: parent.verticalCenter
+            font.letterSpacing: 3
+            font.weight: Font.Bold
         }
 
-        Rectangle {
-            width: 1
-            height: 16
-            color: "#1AFFFFFF"
-            anchors.verticalCenter: parent.verticalCenter
+        // ── Center: Status ────────────────────────────────────────────
+        Item { Layout.fillWidth: true }
+
+        Text {
+            id: statusLabel
+            text: root.statusText
+            color: root.themeObj.textMuted
+            font.pixelSize: 11
+            horizontalAlignment: Text.AlignHCenter
         }
 
-        Row {
-            spacing: 6
-            anchors.verticalCenter: parent.verticalCenter
+        Item { Layout.fillWidth: true }
+
+        // ── Right: System stats + controls ────────────────────────────
+
+        // CPU meter
+        ColumnLayout {
+            spacing: 2
             Text {
-                text: "✦"
-                color: "#A8D8FF"
-                font.pixelSize: 11
-                anchors.verticalCenter: parent.verticalCenter
+                text: "CPU " + root.cpuPercent.toFixed(0) + "%"
+                color: root.themeObj.textMuted
+                font.pixelSize: 9
+                Layout.alignment: Qt.AlignHCenter
             }
+            ProgressBar {
+                id: cpuBar
+                implicitWidth: 60
+                implicitHeight: 3
+                value: 0
+                background: Rectangle {
+                    color: root.themeObj.border
+                    radius: 2
+                }
+                contentItem: Rectangle {
+                    width: cpuBar.visualPosition * cpuBar.width
+                    height: parent.height
+                    radius: 2
+                    color: cpuBar.value > 0.8 ? root.themeObj.error
+                         : cpuBar.value > 0.6 ? root.themeObj.warning
+                         : root.themeObj.accent
+                }
+            }
+        }
+
+        // RAM meter
+        ColumnLayout {
+            spacing: 2
             Text {
-                text: "Llama 3.2"
-                color: "#A0A0A0"
-                font.pixelSize: 11
-                font.weight: Font.Medium
-                anchors.verticalCenter: parent.verticalCenter
+                text: "RAM " + root.memPercent.toFixed(0) + "%"
+                color: root.themeObj.textMuted
+                font.pixelSize: 9
+                Layout.alignment: Qt.AlignHCenter
             }
-        }
-    }
-
-    Row {
-        anchors.right: parent.right
-        anchors.rightMargin: 20
-        anchors.verticalCenter: parent.verticalCenter
-        spacing: 16
-
-        Rectangle {
-            width: 8
-            height: 8
-            radius: 4
-            color: "#00D27A"
-            anchors.verticalCenter: parent.verticalCenter
-            SequentialAnimation on opacity {
-                loops: Animation.Infinite
-                PropertyAnimation { to: 0.4; duration: 1000; easing.type: Easing.InOutSine }
-                PropertyAnimation { to: 1.0; duration: 1000; easing.type: Easing.InOutSine }
+            ProgressBar {
+                id: memBar
+                implicitWidth: 60
+                implicitHeight: 3
+                value: 0
+                background: Rectangle {
+                    color: root.themeObj.border
+                    radius: 2
+                }
+                contentItem: Rectangle {
+                    width: memBar.visualPosition * memBar.width
+                    height: parent.height
+                    radius: 2
+                    color: memBar.value > 0.85 ? root.themeObj.error
+                         : root.themeObj.accentGlow
+                }
             }
         }
 
-        Text {
-            text: "Ollama"
-            color: "#00D27A"
-            font.pixelSize: 11
-            font.weight: Font.Medium
-            anchors.verticalCenter: parent.verticalCenter
-        }
-
+        // Divider
         Rectangle {
             width: 1
-            height: 12
-            color: "#1AFFFFFF"
-            anchors.verticalCenter: parent.verticalCenter
+            height: 24
+            color: root.themeObj.border
         }
 
-        Text {
-            text: "Voice"
-            color: "#A0A0A0"
-            font.pixelSize: 11
-            font.weight: Font.Medium
-            anchors.verticalCenter: parent.verticalCenter
+        // Memory toggle
+        ToolButton {
+            implicitWidth: 36
+            implicitHeight: 36
+            onClicked: root.toggleMemory()
+            ToolTip.visible: hovered
+            ToolTip.text: "Memory"
+            contentItem: Text {
+                text: "🧠"
+                font.pixelSize: 15
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
+            background: Rectangle {
+                color: parent.hovered ? root.themeObj.bgHover : "transparent"
+                radius: root.themeObj.radiusSm
+            }
         }
 
-        Rectangle {
-            width: 1
-            height: 12
-            color: "#1AFFFFFF"
-            anchors.verticalCenter: parent.verticalCenter
+        // Timeline toggle
+        ToolButton {
+            implicitWidth: 36
+            implicitHeight: 36
+            onClicked: root.toggleTimeline()
+            ToolTip.visible: hovered
+            ToolTip.text: "Execution Timeline"
+            contentItem: Text {
+                text: "⚡"
+                font.pixelSize: 15
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
+            background: Rectangle {
+                color: parent.hovered ? root.themeObj.bgHover : "transparent"
+                radius: root.themeObj.radiusSm
+            }
         }
 
-        Text {
-            text: "Settings"
-            color: "#A0A0A0"
-            font.pixelSize: 11
-            font.weight: Font.Medium
-            anchors.verticalCenter: parent.verticalCenter
-
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: bridge.set_view("settings")
+        // Settings toggle
+        ToolButton {
+            implicitWidth: 36
+            implicitHeight: 36
+            onClicked: root.toggleSettings()
+            ToolTip.visible: hovered
+            ToolTip.text: "Settings"
+            contentItem: Text {
+                text: "⚙️"
+                font.pixelSize: 15
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
+            background: Rectangle {
+                color: parent.hovered ? root.themeObj.bgHover : "transparent"
+                radius: root.themeObj.radiusSm
             }
         }
     }

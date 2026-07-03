@@ -1,5 +1,41 @@
+# AETHER Requirements
+# Install with: pip install -r requirements.txt
+
+# ── Core UI Framework ────────────────────────────────────────────────────
 PySide6>=6.6.0
+
+# ── HTTP Client (Ollama API) ─────────────────────────────────────────────
 httpx>=0.27.0
-psutil>=6.0.0
-numpy>=1.26.0
-aiofiles>=24.1.0
+
+# ── Async File I/O ───────────────────────────────────────────────────────
+aiofiles>=23.2.1
+
+# ── System Monitoring ────────────────────────────────────────────────────
+psutil>=5.9.8
+
+# ── Computer Vision ──────────────────────────────────────────────────────
+opencv-python>=4.9.0.80
+
+# ── Speech-to-Text ───────────────────────────────────────────────────────
+faster-whisper>=1.0.0
+
+# ── Audio Recording (for voice STT) ─────────────────────────────────────
+# sounddevice>=0.4.6
+# scipy>=1.12.0
+
+# ── Image capture (for vision screenshots) ──────────────────────────────
+Pillow>=10.2.0
+
+# ── Optional: GPU acceleration for Whisper ───────────────────────────────
+# Install separately if you have an NVIDIA GPU:
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+# ── Piper TTS ────────────────────────────────────────────────────────────
+# Piper is a standalone binary, not a pip package.
+# Download from: https://github.com/rhasspy/piper/releases
+# Place piper.exe (Windows) or piper (Linux/Mac) in PATH.
+
+# ── Ollama ───────────────────────────────────────────────────────────────
+# Ollama is a standalone application, not a pip package.
+# Download from: https://ollama.com
+# Then run: ollama pull llama3.2
