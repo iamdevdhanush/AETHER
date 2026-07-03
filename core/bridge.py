@@ -23,17 +23,34 @@ class AsyncWorker(QThread):
     def __init__(self, coro):
         super().__init__()
         self.coro = coro
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
 
     def run(self):
+        loop = None
         try:
             loop = asyncio.new_event_loop()
+            self._loop = loop
             asyncio.set_event_loop(loop)
             result = loop.run_until_complete(self.coro)
-            loop.close()
             self.result.emit(result)
         except Exception as e:
             logger.exception("AsyncWorker error")
             self.error.emit(str(e))
+        finally:
+            if loop is not None and not loop.is_closed():
+                # Cancel any remaining pending tasks before closing
+                pending = asyncio.all_tasks(loop)
+                for task in pending:
+                    task.cancel()
+                if pending:
+                    try:
+                        loop.run_until_complete(
+                            asyncio.gather(*pending, return_exceptions=True)
+                        )
+                    except Exception:
+                        pass
+                loop.close()
+            self._loop = None
 
 
 class QMLBridge(QObject):
@@ -147,17 +164,26 @@ class QMLBridge(QObject):
 
         # Stream AI response
         full_response = ""
+        chunk_count = 0
         try:
             async for chunk in self.ollama.stream_chat(
                 messages=history,
                 memories=memories,
             ):
+                chunk_count += 1
+                logger.debug("Stream chunk #%s: %r", chunk_count, chunk[:100])
                 self.streamChunk.emit(chunk)
                 full_response += chunk
         except Exception as e:
+            logger.error("Stream error after %s chunks: %s", chunk_count, e)
             self.streamError.emit(str(e))
             return
 
+        logger.info(
+            "Stream complete: %s chunks, %s chars total",
+            chunk_count,
+            len(full_response),
+        )
         self.streamComplete.emit()
 
         # Save assistant message

@@ -10,6 +10,13 @@ Rectangle {
 
     property bool isStreaming: false
     property string streamBuffer: ""
+    property var suggestions: [
+        "Write a Python script",
+        "Explain quantum computing",
+        "Help me debug code",
+        "Analyze a document",
+        "System status report",
+    ]
 
     function appendMessage(role, content) {
         // Only add user messages here; AI messages are built by streaming
@@ -109,9 +116,9 @@ Rectangle {
 
         delegate: MessageBubble {
             width: messageList.width
-            role: model.role
-            content: model.content
-            isStreaming: model.isStreaming
+            role: messageModel.get(index).role
+            content: messageModel.get(index).content
+            isStreaming: messageModel.get(index).isStreaming
             themeObj: root.themeObj
         }
 
@@ -165,15 +172,9 @@ Rectangle {
                     spacing: 8
 
                     Repeater {
-                        model: [
-                            "Write a Python script",
-                            "Explain quantum computing",
-                            "Help me debug code",
-                            "Analyze a document",
-                            "System status report",
-                        ]
+                        model: root.suggestions
                         delegate: SuggestionChip {
-                            text: modelData
+                            text: root.suggestions[index]
                             themeObj: root.themeObj
                             onClicked: bridge.sendMessage(text)
                         }

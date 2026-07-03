@@ -122,18 +122,35 @@ class OllamaService:
                     )
 
                 async for line in response.aiter_lines():
-                    if not line.strip():
+                    raw = line.strip()
+                    if not raw:
                         continue
+
                     try:
-                        chunk_data = json.loads(line)
+                        chunk_data = json.loads(raw)
                     except json.JSONDecodeError:
+                        logger.warning("Ollama non-JSON line: %s", raw[:200])
                         continue
+
+                    # Extract content BEFORE checking done — some Ollama versions
+                    # send the final content token on the same chunk as done:true
+                    content = ""
+                    message = chunk_data.get("message")
+                    if isinstance(message, dict):
+                        content = message.get("content", "")
+                    elif isinstance(message, str):
+                        # Fallback: if message is a bare string, use it directly
+                        content = message
+                    elif "response" in chunk_data:
+                        # Fallback: if using /api/generate format
+                        content = chunk_data.get("response", "")
 
                     if chunk_data.get("done"):
+                        # Yield any remaining content before closing
+                        if content:
+                            yield content
                         break
 
-                    message = chunk_data.get("message", {})
-                    content = message.get("content", "")
                     if content:
                         yield content
 

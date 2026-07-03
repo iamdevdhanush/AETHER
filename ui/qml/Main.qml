@@ -75,9 +75,7 @@ Window {
             topBar.updateStats(stats)
         }
         function onPluginsLoaded(plugins) {
-            if (pluginsPanel.visible) {
-                pluginsPanel.updatePlugins(plugins)
-            }
+            // Plugins UI not yet implemented; plugins available in CommandInput toolbar
         }
         function onTimelineEventAdded(event) {
             timelinePanel.addEvent(event)
