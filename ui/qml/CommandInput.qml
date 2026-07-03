@@ -46,26 +46,28 @@ Rectangle {
 
             Repeater {
                 model: root.plugins
-                delegate: ToolButton {
-                    implicitWidth: 30
-                    implicitHeight: 30
-                    ToolTip.visible: hovered
-                    ToolTip.text: root.plugins[index].tip
-                    onClicked: {
-                        root.executePlugin(root.plugins[index].name, inputField.text)
-                        inputField.clear()
-                    }
-                    contentItem: Text {
-                        text: root.plugins[index].icon
-                        font.pixelSize: 14
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    background: Rectangle {
-                        color: parent.hovered ? root.themeObj.bgHover : root.themeObj.bgCard
-                        radius: root.themeObj.radiusSm
-                        border.color: root.themeObj.border
-                        border.width: 1
+                delegate: Item {
+                    ToolButton {
+                        implicitWidth: 30
+                        implicitHeight: 30
+                        ToolTip.visible: hovered
+                        ToolTip.text: model.tip
+                        onClicked: {
+                            root.executePlugin(model.name, inputField.text)
+                            inputField.clear()
+                        }
+                        contentItem: Text {
+                            text: model.icon
+                            font.pixelSize: 14
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        background: Rectangle {
+                            color: parent.hovered ? root.themeObj.bgHover : root.themeObj.bgCard
+                            radius: root.themeObj.radiusSm
+                            border.color: root.themeObj.border
+                            border.width: 1
+                        }
                     }
                 }
             }

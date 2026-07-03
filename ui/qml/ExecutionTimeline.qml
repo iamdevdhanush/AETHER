@@ -117,7 +117,7 @@ Rectangle {
                     anchors.left: parent.left
                     anchors.leftMargin: 19
                     anchors.verticalCenter: parent.verticalCenter
-                    color: _dotColor(timelineModel.get(index).eventType)
+                    color: _dotColor(model.eventType)
 
                     // Pulse for recent events
                     SequentialAnimation on scale {
@@ -135,7 +135,7 @@ Rectangle {
                     spacing: 2
 
                     Text {
-                        text: timelineModel.get(index).description
+                        text: model.description
                         color: root.themeObj.textSec
                         font.pixelSize: 11
                         elide: Text.ElideRight
@@ -143,7 +143,7 @@ Rectangle {
                     }
 
                     Text {
-                        text: _formatTime(timelineModel.get(index).timestamp)
+                        text: _formatTime(model.timestamp)
                         color: root.themeObj.textMuted
                         font.pixelSize: 9
                     }

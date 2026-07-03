@@ -123,7 +123,7 @@ Item {
         // Message content
         Rectangle {
             Layout.fillWidth: true
-            implicitHeight: contentText.implicitHeight + 24
+            implicitHeight: contentText.contentHeight + 24
             color: isUser ? root.themeObj.user + "18"
                  : isError ? root.themeObj.error + "18"
                  : root.themeObj.bgCard

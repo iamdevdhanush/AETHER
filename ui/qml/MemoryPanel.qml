@@ -137,12 +137,12 @@ Rectangle {
                         width: 3
                         Layout.fillHeight: true
                         radius: 2
-                        color: _importanceColor(memoryModel.get(index).importance || 0.5)
+                        color: _importanceColor(model.importance || 0.5)
                     }
 
                     Text {
                         id: memContent
-                        text: memoryModel.get(index).content || ""
+                        text: model.content || ""
                         color: root.themeObj.textSec
                         font.pixelSize: 11
                         wrapMode: Text.WordWrap
@@ -153,7 +153,7 @@ Rectangle {
                     ToolButton {
                         implicitWidth: 22; implicitHeight: 22
                         visible: memHover.containsMouse
-                        onClicked: bridge.deleteMemory(memoryModel.get(index).id)
+                        onClicked: bridge.deleteMemory(model.id)
                         contentItem: Text {
                             text: "✕"
                             color: root.themeObj.error

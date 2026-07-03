@@ -114,12 +114,14 @@ Rectangle {
         // Top spacer
         header: Item { height: 16; width: parent.width }
 
-        delegate: MessageBubble {
+        delegate: Item {
             width: messageList.width
-            role: messageModel.get(index).role
-            content: messageModel.get(index).content
-            isStreaming: messageModel.get(index).isStreaming
-            themeObj: root.themeObj
+            MessageBubble {
+                role: model.role
+                content: model.content
+                isStreaming: model.isStreaming
+                themeObj: root.themeObj
+            }
         }
 
         // Bottom spacer
@@ -173,10 +175,12 @@ Rectangle {
 
                     Repeater {
                         model: root.suggestions
-                        delegate: SuggestionChip {
-                            text: root.suggestions[index]
-                            themeObj: root.themeObj
-                            onClicked: bridge.sendMessage(text)
+                        delegate: Item {
+                            SuggestionChip {
+                                text: modelData !== undefined ? modelData : model
+                                themeObj: root.themeObj
+                                onClicked: bridge.sendMessage(text)
+                            }
                         }
                     }
                 }
