@@ -115,12 +115,21 @@ Rectangle {
         header: Item { height: 16; width: parent.width }
 
         delegate: Item {
-            width: messageList.width
+            // KEY FIX: height must be bound to the bubble's implicitHeight.
+            // Without this the Item collapses to 0 and every bubble
+            // is painted on top of the previous one at y=0.
+            width:  messageList.width
+            height: bubble.implicitHeight
+
             MessageBubble {
-                role: model.role
-                content: model.content
+                id: bubble
+                // Fill the delegate Item so the bubble knows its width.
+                anchors.left:  parent.left
+                anchors.right: parent.right
+                role:        model.role
+                content:     model.content
                 isStreaming: model.isStreaming
-                themeObj: root.themeObj
+                themeObj:    root.themeObj
             }
         }
 
