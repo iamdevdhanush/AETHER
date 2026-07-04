@@ -66,8 +66,8 @@ class ReasoningEngine:
             f"Decide what to do next. Respond with EXACTLY:\n"
             f"thought|tool_name|parameters_json|is_complete(true/false)\n\n"
             f"Examples:\n"
-            f"thought|browser|{\"input\":\"google.com\"}|false\n"
-            f"thought||{}|true\n\n"
+            "thought|browser|{\"input\":\"google.com\"}|false\n"
+            "thought||{}|true\n\n"
             f"Parameters must be valid JSON."
         )
 

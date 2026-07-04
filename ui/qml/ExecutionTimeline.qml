@@ -240,6 +240,12 @@ Rectangle {
             case "plugin_execute":  return root.themeObj.accent
             case "error":           return root.themeObj.error
             case "system":          return root.themeObj.warning
+            case "thinking":        return "#A78BFA"
+            case "planning":        return "#F59E0B"
+            case "plan_created":    return "#10B981"
+            case "plan_complete":   return "#059669"
+            case "reflection":      return "#8B5CF6"
+            case "observation":     return "#6EE7B7"
             default:                return root.themeObj.textMuted
         }
     }
@@ -251,6 +257,12 @@ Rectangle {
             case "executing":       return "EXEC"
             case "result":          return "DONE"
             case "error":           return "FAIL"
+            case "thinking":        return "THINK"
+            case "planning":        return "PLAN"
+            case "plan_created":    return "PLAN"
+            case "plan_complete":   return "DONE"
+            case "reflection":      return "REFL"
+            case "observation":     return "OBS"
             default:                return ""
         }
     }

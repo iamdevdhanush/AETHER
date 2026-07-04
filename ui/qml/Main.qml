@@ -67,6 +67,31 @@ Window {
         function onMemoriesLoaded(memories)      { memoryPanel.updateMemories(memories) }
         function onStatusMessage(msg)            { topBar.setStatus(msg) }
         function onErrorOccurred(err)            { topBar.setStatus("Error: " + err) }
+
+        // Agent reasoning signals
+        function onReasoningStateChanged(state)   {
+            if (state.thought) {
+                timelinePanel.addEvent({
+                    type: "thinking",
+                    description: state.thought,
+                    timestamp: Date.now(),
+                })
+            }
+        }
+        function onPlanCreated(plan) {
+            timelinePanel.addEvent({
+                type: "plan_created",
+                description: "Plan: " + (plan.goal || ""),
+                timestamp: Date.now(),
+            })
+        }
+        function onObservationReady(obs) {
+            timelinePanel.addEvent({
+                type: "observation",
+                description: (obs.success ? "✓ " : "✗ ") + obs.tool + " (" + obs.execution_time_ms.toFixed(0) + "ms)",
+                timestamp: Date.now(),
+            })
+        }
     }
 
     // ── Root layout ────────────────────────────────────────────────────────

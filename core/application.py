@@ -1,7 +1,7 @@
 """
-AETHER Core Application
+AETHER Core Application v2
 Orchestrates startup, initialization, and teardown.
-Creates the Agent Runtime and wires it into the QML bridge.
+Creates the full Agent Runtime dependency graph and wires it into QML.
 """
 
 import logging
@@ -11,28 +11,17 @@ from typing import Optional
 
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QObject, Signal, Slot, QTimer, QThread
-from PySide6.QtQml import QQmlApplicationEngine, qmlRegisterType, qmlRegisterSingletonType
+from PySide6.QtQml import QQmlApplicationEngine
 
 from ui.splash import SplashScreen
 from core.initializer import SystemInitializer
 from core.bridge import QMLBridge
 from core.agent_runtime import AgentRuntime
-from database.db_manager import DatabaseManager
-from services.ollama_service import OllamaService
-from services.plugin_manager import PluginManager
-from services.conversation_service import ConversationService
-from services.memory_service import MemoryService
-from services.system_monitor import SystemMonitorService
 
 logger = logging.getLogger(__name__)
 
 
 class AetherApplication(QObject):
-    """
-    Top-level application coordinator.
-    Manages splash → init → workspace lifecycle.
-    Creates the Agent Runtime that processes all user messages.
-    """
 
     initialization_complete = Signal()
     initialization_failed = Signal(str)
@@ -47,25 +36,28 @@ class AetherApplication(QObject):
         self.agent_runtime: Optional[AgentRuntime] = None
 
         # Core services
-        self.db: Optional[DatabaseManager] = None
-        self.ollama: Optional[OllamaService] = None
-        self.plugin_manager: Optional[PluginManager] = None
-        self.conversation_service: Optional[ConversationService] = None
-        self.memory_service: Optional[MemoryService] = None
-        self.system_monitor: Optional[SystemMonitorService] = None
+        self.db = None
+        self.ollama = None
+        self.plugin_manager = None
+        self.conversation_service = None
+        self.memory_service = None
+        self.system_monitor = None
+        self.tool_registry = None
+        self.intent_engine = None
+        self.planner = None
+        self.observation_engine = None
+        self.reflection_engine = None
+        self.permission_manager = None
+        self.reasoning_engine = None
 
-        # Async event loop thread
-        self.loop: Optional[asyncio.AbstractEventLoop] = None
         self._init_thread: Optional[QThread] = None
 
     def launch(self):
-        """Show splash and begin initialization."""
         self.splash = SplashScreen(self.project_root)
         self.splash.show()
         QTimer.singleShot(200, self._begin_initialization)
 
     def _begin_initialization(self):
-        """Run initialization in a worker thread to keep UI responsive."""
         self.initializer = SystemInitializer(self.project_root)
         self.initializer.status_update.connect(self._on_status_update)
         self.initializer.initialization_done.connect(self._on_initialization_done)
@@ -79,7 +71,6 @@ class AetherApplication(QObject):
 
     @Slot(object)
     def _on_initialization_done(self, services: dict):
-        """Called when all services are ready."""
         logger.info("All services initialized")
 
         self.db = services["db"]
@@ -88,34 +79,33 @@ class AetherApplication(QObject):
         self.conversation_service = services["conversation_service"]
         self.memory_service = services["memory_service"]
         self.system_monitor = services["system_monitor"]
+        self.tool_registry = services["tool_registry"]
+        self.intent_engine = services["intent_engine"]
+        self.planner = services["planner"]
+        self.observation_engine = services["observation_engine"]
+        self.reflection_engine = services["reflection_engine"]
+        self.permission_manager = services["permission_manager"]
+        self.reasoning_engine = services["reasoning_engine"]
 
-        # Small pause so user sees "Ready"
         QTimer.singleShot(600, self._launch_workspace)
 
     @Slot(str)
     def _on_initialization_error(self, error: str):
-        logger.error(f"Initialization failed: {error}")
+        logger.error("Initialization failed: %s", error)
         if self.splash:
             self.splash.set_status(f"Error: {error}")
 
     def _launch_workspace(self):
-        """Tear down splash and open the main QML workspace."""
         if self.splash:
             self.splash.close()
             self.splash = None
-
         self._setup_qml_engine()
 
     def _setup_qml_engine(self):
-        """Configure QML engine, register bridge, load main QML."""
-        from core.bridge import QMLBridge
-
         self.engine = QQmlApplicationEngine()
 
-        # Create bridge placeholder (agent_runtime set after bridge creation)
         self.bridge = QMLBridge(
-            db=self.db,
-            ollama=self.ollama,
+            db=self.db, ollama=self.ollama,
             plugin_manager=self.plugin_manager,
             conversation_service=self.conversation_service,
             memory_service=self.memory_service,
@@ -124,23 +114,26 @@ class AetherApplication(QObject):
             agent_runtime=None,
         )
 
-        # Create Agent Runtime with reference to bridge
         self.agent_runtime = AgentRuntime(
+            tool_registry=self.tool_registry,
+            intent_engine=self.intent_engine,
+            planner=self.planner,
+            reasoning_engine=self.reasoning_engine,
+            observation_engine=self.observation_engine,
+            reflection_engine=self.reflection_engine,
+            permission_manager=self.permission_manager,
             ollama=self.ollama,
-            plugin_manager=self.plugin_manager,
-            conversation_service=self.conversation_service,
             memory_service=self.memory_service,
+            conversation_service=self.conversation_service,
             bridge=self.bridge,
         )
         self.bridge.agent_runtime = self.agent_runtime
 
-        # Expose bridge to QML
         self.engine.rootContext().setContextProperty("bridge", self.bridge)
         self.engine.rootContext().setContextProperty(
-            "projectRoot", str(self.project_root)
+            "projectRoot", str(self.project_root),
         )
 
-        # Load main QML file
         main_qml = self.project_root / "ui" / "qml" / "Main.qml"
         self.engine.load(str(main_qml))
 
@@ -152,7 +145,6 @@ class AetherApplication(QObject):
         logger.info("AETHER workspace launched")
 
     def cleanup(self):
-        """Graceful shutdown."""
         logger.info("AETHER shutting down...")
         if self.bridge:
             self.bridge.cleanup()
@@ -161,7 +153,6 @@ class AetherApplication(QObject):
         if self.system_monitor:
             self.system_monitor.stop()
         if self.ollama:
-            import asyncio
             try:
                 loop = asyncio.new_event_loop()
                 loop.run_until_complete(self.ollama.close())

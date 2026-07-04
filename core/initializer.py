@@ -1,6 +1,7 @@
 """
-AETHER System Initializer
-Runs all startup tasks in a QThread to keep the splash screen responsive.
+AETHER System Initializer v2
+Sequential initialization of all subsystems.
+Creates the complete agent runtime dependency graph.
 """
 
 import logging
@@ -13,10 +14,6 @@ logger = logging.getLogger(__name__)
 
 
 class SystemInitializer(QThread):
-    """
-    Sequential initialization of all AETHER subsystems.
-    Emits status_update for each step, then initialization_done with service dict.
-    """
 
     status_update = Signal(str)
     initialization_done = Signal(object)
@@ -43,10 +40,10 @@ class SystemInitializer(QThread):
             ollama = OllamaService()
             services["ollama"] = ollama
 
-            # Step 3: Memory
-            self.status_update.emit("Loading memory...")
+            # Step 3: Memory (long-term + short-term + working)
+            self.status_update.emit("Loading memory engine...")
             from services.memory_service import MemoryService
-            memory = MemoryService(db)
+            memory = MemoryService(db, ollama)
             services["memory_service"] = memory
 
             # Step 4: Conversation
@@ -55,14 +52,50 @@ class SystemInitializer(QThread):
             conversation = ConversationService(db, ollama, memory)
             services["conversation_service"] = conversation
 
-            # Step 5: Plugins
-            self.status_update.emit("Loading plugins...")
+            # Step 5: Tool Registry
+            self.status_update.emit("Creating tool registry...")
+            from core.tool_registry import ToolRegistry
+            tool_registry = ToolRegistry()
+            services["tool_registry"] = tool_registry
+
+            # Step 6: Plugins → register as tools
+            self.status_update.emit("Loading and registering tools...")
             from services.plugin_manager import PluginManager
-            plugin_manager = PluginManager(self.project_root / "plugins")
+            plugin_manager = PluginManager(self.project_root / "plugins", tool_registry)
             plugin_manager.discover_and_load()
             services["plugin_manager"] = plugin_manager
 
-            # Step 6: System Monitor
+            # Step 7: Core engine components
+            self.status_update.emit("Initializing agent engines...")
+            from core.intent_engine import IntentEngine
+            from core.planner import Planner
+            from core.observation_engine import ObservationEngine
+            from core.reflection_engine import ReflectionEngine
+            from core.permission_manager import PermissionManager
+            from core.reasoning_engine import ReasoningEngine
+
+            intent_engine = IntentEngine(tool_registry, ollama)
+            planner = Planner(tool_registry, ollama)
+            observation_engine = ObservationEngine()
+            reflection_engine = ReflectionEngine(ollama)
+            permission_manager = PermissionManager()
+
+            reasoning_engine = ReasoningEngine(
+                tool_registry=tool_registry,
+                observation_engine=observation_engine,
+                reflection_engine=reflection_engine,
+                permission_manager=permission_manager,
+                ollama=ollama,
+            )
+
+            services["intent_engine"] = intent_engine
+            services["planner"] = planner
+            services["observation_engine"] = observation_engine
+            services["reflection_engine"] = reflection_engine
+            services["permission_manager"] = permission_manager
+            services["reasoning_engine"] = reasoning_engine
+
+            # Step 8: System Monitor
             self.status_update.emit("Starting system monitor...")
             from services.system_monitor import SystemMonitorService
             sysmon = SystemMonitorService()

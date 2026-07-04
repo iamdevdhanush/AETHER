@@ -10,13 +10,14 @@ Rectangle {
 
     property bool isStreaming: false
     property string streamBuffer: ""
-    property var suggestions: [
-        "Write a Python script",
-        "Explain quantum computing",
-        "Help me debug code",
-        "Analyze a document",
-        "System status report",
-    ]
+    ListModel {
+        id: suggestionsModel
+        ListElement { text: "Write a Python script" }
+        ListElement { text: "Explain quantum computing" }
+        ListElement { text: "Help me debug code" }
+        ListElement { text: "Analyze a document" }
+        ListElement { text: "System status report" }
+    }
 
     function appendMessage(role, content) {
         if (role === "user") {
@@ -216,9 +217,9 @@ Rectangle {
                     spacing: 8
 
                     Repeater {
-                        model: root.suggestions
+                        model: suggestionsModel
                         delegate: SuggestionChip {
-                            text: modelData !== undefined ? modelData : ""
+                            text: model.text
                             themeObj: root.themeObj
                             onClicked: bridge.sendMessage(text)
                         }

@@ -96,12 +96,12 @@ Rectangle {
 
                     Text {
                         anchors.centerIn: parent
-                        text: model.icon
+                        text: model ? (model.icon || "") : ""
                         font.pixelSize: 13
                     }
 
                     ToolTip.visible: plugHover.containsMouse
-                    ToolTip.text:    model.tip
+                    ToolTip.text:    model ? (model.tip || "") : ""
                     ToolTip.delay:   500
 
                     MouseArea {

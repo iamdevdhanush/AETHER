@@ -1,38 +1,38 @@
 """
-AETHER QML Bridge
+AETHER QML Bridge v2
 All QML ↔ Python communication flows through this object.
 Exposed to QML as `bridge`.
 
-Every user message routes through the Agent Runtime:
-  Intent → Selected Tool → Executing → Result
+Routes through the new Agent Runtime:
+  Intent → Tool/Plan → Reasoning Loop → Tool Execution → Observation → Reflection
 """
 
 import logging
 import asyncio
 import threading
+import json
+import time
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import QObject, Signal, Slot, Property, QTimer, QThread
+from PySide6.QtCore import QObject, Signal, Slot, QTimer, QThread
 
 logger = logging.getLogger(__name__)
 
 
 class AsyncWorker(QThread):
-    """Runs a coroutine and emits result."""
+    """Runs a coroutine in a dedicated thread and emits result."""
     result = Signal(object)
     error = Signal(str)
 
     def __init__(self, coro):
         super().__init__()
         self.coro = coro
-        self._loop: Optional[asyncio.AbstractEventLoop] = None
 
     def run(self):
         loop = None
         try:
             loop = asyncio.new_event_loop()
-            self._loop = loop
             asyncio.set_event_loop(loop)
             result = loop.run_until_complete(self.coro)
             self.result.emit(result)
@@ -52,14 +52,9 @@ class AsyncWorker(QThread):
                     except Exception:
                         pass
                 loop.close()
-            self._loop = None
 
 
 class QMLBridge(QObject):
-    """
-    Central bridge between QML UI and Python backend.
-    Routes through AgentRuntime for intent→tool→result flow.
-    """
 
     # ── Conversation signals ──────────────────────────────────────────────
     messageReceived = Signal(str, str)        # role, content
@@ -87,6 +82,11 @@ class QMLBridge(QObject):
     # ── Execution timeline ────────────────────────────────────────────────
     timelineEventAdded = Signal("QVariantMap")
 
+    # ── Agent reasoning signals ───────────────────────────────────────────
+    reasoningStateChanged = Signal("QVariantMap")
+    planCreated = Signal("QVariantMap")
+    observationReady = Signal("QVariantMap")
+
     # ── General ──────────────────────────────────────────────────────────
     errorOccurred = Signal(str)
     statusMessage = Signal(str)
@@ -107,10 +107,8 @@ class QMLBridge(QObject):
         self._current_conversation_id: Optional[str] = None
         self._active_workers = []
 
-        # Connect system monitor updates
         self.system_monitor.stats_ready.connect(self._on_system_stats)
 
-        # Poll system stats every 5 seconds (was 2s — reduces CPU/energy)
         self._stats_timer = QTimer(self)
         self._stats_timer.setInterval(5000)
         self._stats_timer.timeout.connect(self.system_monitor.update)
@@ -120,17 +118,12 @@ class QMLBridge(QObject):
 
     @Slot(str)
     def sendMessage(self, text: str):
-        """
-        Entry point for all user messages from QML.
-        Routes through Agent Runtime for intent classification.
-        """
         if not text.strip():
             return
-
         text = text.strip()
         logger.info("sendMessage: %s", text[:120])
 
-        self._emit_timeline_event("user_message", f"User: {text[:80]}")
+        self._emit_timeline("user_message", f"User: {text[:80]}")
 
         worker = AsyncWorker(self._async_send_message(text))
         worker.error.connect(lambda e: self.streamError.emit(e))
@@ -139,21 +132,19 @@ class QMLBridge(QObject):
         worker.start()
 
     async def _async_send_message(self, text: str):
-        """
-        Process message through Agent Runtime first.
-        Falls back to streaming chat for conversation intents.
-        """
-        self.messageReceived.emit("user", text)
-
-        conv_id = await self._ensure_conversation(text)
-        if not conv_id:
+        self._current_conversation_id = await self._ensure_conversation(text)
+        if not self._current_conversation_id:
             return
 
+        self.messageReceived.emit("user", text)
+
         await self.conversation_service.add_message(
-            conversation_id=conv_id, role="user", content=text,
+            conversation_id=self._current_conversation_id,
+            role="user", content=text,
         )
 
-        memories = await self.memory_service.get_relevant_memories(text)
+        if self.memory_service:
+            await self.memory_service.extract_and_store(text, "")
 
         if self.agent_runtime:
             try:
@@ -166,16 +157,13 @@ class QMLBridge(QObject):
             if result is not None:
                 self.messageReceived.emit("assistant", result)
                 self.streamComplete.emit()
-
                 await self.conversation_service.add_message(
-                    conversation_id=conv_id,
-                    role="assistant",
-                    content=result,
+                    conversation_id=self._current_conversation_id,
+                    role="assistant", content=result,
                 )
-                await self.memory_service.extract_and_store(text, result)
                 return
 
-        await self._stream_chat(text, conv_id, memories)
+        await self._stream_chat(text)
 
     async def _ensure_conversation(self, text: str) -> Optional[str]:
         if not self._current_conversation_id:
@@ -186,47 +174,39 @@ class QMLBridge(QObject):
             self.conversationCreated.emit(conv["id"], conv["title"])
         return self._current_conversation_id
 
-    async def _stream_chat(self, text: str, conv_id: str,
-                           memories: list[dict]):
-        """Stream a conversational AI response through Ollama."""
-        # Use context window (last 20 messages) to avoid loading full history
+    async def _stream_chat(self, text: str):
         history = await self.conversation_service.get_context_window(
-            conv_id, max_messages=20,
+            self._current_conversation_id, max_messages=20,
         )
 
         full_response = ""
         chunk_count = 0
         try:
-            async for chunk in self.ollama.stream_chat(
-                messages=history,
-                memories=memories,
-            ):
+            async for chunk in self.ollama.stream_chat(messages=history):
                 chunk_count += 1
                 self.streamChunk.emit(chunk)
                 full_response += chunk
         except Exception as e:
-            logger.error("Stream error after %s chunks: %s", chunk_count, e)
+            logger.error("Stream error: %s", e)
             self.streamError.emit(str(e))
             return
 
-        logger.info(
-            "Stream complete: %s chunks, %s chars",
-            chunk_count, len(full_response),
-        )
         self.streamComplete.emit()
 
         await self.conversation_service.add_message(
-            conversation_id=conv_id,
-            role="assistant",
-            content=full_response,
+            conversation_id=self._current_conversation_id,
+            role="assistant", content=full_response,
         )
 
-        await self.memory_service.extract_and_store(text, full_response)
+        if self.memory_service:
+            await self.memory_service.extract_and_store(text, full_response)
+            await self.memory_service.summarize_and_store(
+                self._current_conversation_id,
+                [{"role": "user", "content": text},
+                 {"role": "assistant", "content": full_response}],
+            )
 
-        self._emit_timeline_event(
-            "ai_response",
-            f"AI responded ({len(full_response)} chars)",
-        )
+        self._emit_timeline("ai_response", f"AI responded ({len(full_response)} chars)")
 
     @Slot()
     def loadConversations(self):
@@ -277,11 +257,8 @@ class QMLBridge(QObject):
 
     @Slot(str, str)
     def executePlugin(self, plugin_name: str, payload: str):
-        """Execute a plugin by name with a string payload."""
-        self._emit_timeline_event("plugin_execute", f"Plugin: {plugin_name}")
-        worker = AsyncWorker(
-            self._async_execute_plugin(plugin_name, payload)
-        )
+        self._emit_timeline("plugin_execute", f"Plugin: {plugin_name}")
+        worker = AsyncWorker(self._async_execute_plugin(plugin_name, payload))
         worker.result.connect(
             lambda r: self.pluginResult.emit(plugin_name, str(r))
         )
@@ -293,10 +270,11 @@ class QMLBridge(QObject):
         worker.start()
 
     async def _async_execute_plugin(self, plugin_name: str, payload: str):
-        plugin = self.plugin_manager.get_plugin(plugin_name)
-        if not plugin:
+        tool = self.plugin_manager.get_plugin(plugin_name)
+        if not tool:
             raise ValueError(f"Plugin '{plugin_name}' not found")
-        return await plugin.execute({"input": payload})
+        obs = await tool.execute({"input": payload})
+        return obs.stdout[:500]
 
     # ── Memory ────────────────────────────────────────────────────────────
 
@@ -338,26 +316,56 @@ class QMLBridge(QObject):
         self.ollama.set_model(model_name)
         self.statusMessage.emit(f"Model set to {model_name}")
 
+    # ── Agent Runtime Integration ─────────────────────────────────────────
+
+    def on_reasoning_state(self, state):
+        """Called by AgentRuntime on each reasoning step."""
+        self.reasoningStateChanged.emit({
+            "thought": state.thought,
+            "tool": state.selected_tool or "",
+            "parameters": json.dumps(state.parameters),
+            "reflection": state.reflection,
+            "is_complete": state.is_complete,
+        })
+
+    def on_plan_created(self, plan):
+        self.planCreated.emit({
+            "goal": plan.goal,
+            "steps": [s.__dict__ for s in plan.steps],
+        })
+
+    def on_observation(self, observation: dict):
+        self.observationReady.emit({
+            "tool": observation.get("tool", ""),
+            "stdout": observation.get("stdout", "")[:500],
+            "stderr": observation.get("stderr", "")[:200],
+            "exit_code": observation.get("exit_code", 0),
+            "execution_time_ms": observation.get("execution_time_ms", 0),
+            "success": observation.get("success", False),
+        })
+
     # ── Utilities ─────────────────────────────────────────────────────────
 
-    def _emit_timeline_event(self, event_type: str, description: str):
-        import time
-        self.timelineEventAdded.emit({
+    def _emit_timeline(self, event_type: str, description: str,
+                        metadata: dict = None):
+        ev = {
             "type": event_type,
             "description": description,
             "timestamp": int(time.time() * 1000),
-        })
-
-    def _cleanup_worker(self, worker):
-        if worker in self._active_workers:
-            self._active_workers.remove(worker)
+        }
+        if metadata:
+            ev["metadata"] = metadata
+        self.timelineEventAdded.emit(ev)
 
     @Slot(result=str)
     def currentConversationId(self) -> str:
         return self._current_conversation_id or ""
 
+    def _cleanup_worker(self, worker):
+        if worker in self._active_workers:
+            self._active_workers.remove(worker)
+
     def cleanup(self):
-        """Shut down workers, timers, and connections."""
         self._stats_timer.stop()
         for worker in list(self._active_workers):
             if worker.isRunning():

@@ -212,7 +212,7 @@ class AgentRuntime:
         tool_obj = self.tool_registry.get(intent.tool_name)
         if tool_obj:
             return None
-        tools_desc = "\n".join(t.name() for t in self.tool_registry._tools.values())
+        tools_desc = "\n".join(t["name"] for t in self.tool_registry.list_tools())
         prompt = (
             f"The tool '{intent.tool_name}' was requested but is not available.\n"
             f"Available tools: {tools_desc}\n\n"
@@ -222,7 +222,8 @@ class AgentRuntime:
         try:
             result = await self.ollama.generate(prompt, system="You map requests to available tools.")
             result = result.strip().lower()
-            if result in self.tool_registry.list_tools():
+            tool_names = [t["name"] for t in self.tool_registry.list_tools()]
+            if result in tool_names:
                 return None
         except:
             pass

@@ -27,6 +27,11 @@ def main():
     logger = logging.getLogger(__name__)
     logger.info("AETHER starting...")
 
+    # Set Qt Quick Controls style to Fusion before any QML is loaded.
+    # This eliminates "current style does not support customization" warnings
+    # for custom backgrounds/contentItems used throughout the app.
+    os.environ["QT_QUICK_CONTROLS_STYLE"] = "Fusion"
+
     QCoreApplication.setApplicationName("AETHER")
     QCoreApplication.setApplicationVersion("1.0.0")
     QCoreApplication.setOrganizationName("AETHER")
@@ -34,8 +39,7 @@ def main():
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
 
-    # High DPI
-    app.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
+    # High DPI — Qt 6 auto-scales; no attribute needed.
 
     # Load fonts
     fonts_dir = PROJECT_ROOT / "ui" / "assets" / "fonts"
