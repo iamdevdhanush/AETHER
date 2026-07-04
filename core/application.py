@@ -43,7 +43,7 @@ class AetherApplication(QObject):
         self.memory_service = None
         self.system_monitor = None
         self.tool_registry = None
-        self.intent_engine = None
+        self.intent_router = None
         self.planner = None
         self.observation_engine = None
         self.reflection_engine = None
@@ -80,7 +80,7 @@ class AetherApplication(QObject):
         self.memory_service = services["memory_service"]
         self.system_monitor = services["system_monitor"]
         self.tool_registry = services["tool_registry"]
-        self.intent_engine = services["intent_engine"]
+        self.intent_router = services["intent_router"]
         self.planner = services["planner"]
         self.observation_engine = services["observation_engine"]
         self.reflection_engine = services["reflection_engine"]
@@ -116,7 +116,7 @@ class AetherApplication(QObject):
 
         self.agent_runtime = AgentRuntime(
             tool_registry=self.tool_registry,
-            intent_engine=self.intent_engine,
+            intent_router=self.intent_router,
             planner=self.planner,
             reasoning_engine=self.reasoning_engine,
             observation_engine=self.observation_engine,

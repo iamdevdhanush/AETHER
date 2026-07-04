@@ -58,7 +58,7 @@ class SystemInitializer(QThread):
             tool_registry = ToolRegistry()
             services["tool_registry"] = tool_registry
 
-            # Step 6: Plugins → register as tools
+            # Step 6: Plugins -> register as tools
             self.status_update.emit("Loading and registering tools...")
             from services.plugin_manager import PluginManager
             plugin_manager = PluginManager(self.project_root / "plugins", tool_registry)
@@ -67,14 +67,14 @@ class SystemInitializer(QThread):
 
             # Step 7: Core engine components
             self.status_update.emit("Initializing agent engines...")
-            from core.intent_engine import IntentEngine
+            from core.intent_router import IntentRouter
             from core.planner import Planner
             from core.observation_engine import ObservationEngine
             from core.reflection_engine import ReflectionEngine
             from core.permission_manager import PermissionManager
             from core.reasoning_engine import ReasoningEngine
 
-            intent_engine = IntentEngine(tool_registry, ollama)
+            intent_router = IntentRouter(tool_registry, ollama)
             planner = Planner(tool_registry, ollama)
             observation_engine = ObservationEngine()
             reflection_engine = ReflectionEngine(ollama)
@@ -88,7 +88,7 @@ class SystemInitializer(QThread):
                 ollama=ollama,
             )
 
-            services["intent_engine"] = intent_engine
+            services["intent_router"] = intent_router
             services["planner"] = planner
             services["observation_engine"] = observation_engine
             services["reflection_engine"] = reflection_engine

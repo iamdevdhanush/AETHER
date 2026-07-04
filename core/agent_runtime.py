@@ -1,12 +1,25 @@
 """
-AETHER Agent Runtime v2
-Orchestrates the full autonomous agent pipeline:
+AETHER Agent Runtime v3
+Orchestrates the autonomous agent pipeline with strict intent routing:
 
-User Request → Intent Engine → Planner (if complex) → Reasoning Loop:
-  Think → Choose Tool → Execute → Observe → Reflect → Repeat
+User Request
+  |
+  v
+Intent Router (4 routes)
+  |
+  +-- KNOWLEDGE      -> LLM only. No planner. No tools.
+  +-- DESKTOP_ACTION -> Planner -> Tool Selection -> Execution (2-5 iterations)
+  +-- MIXED_TASK     -> Planner + LLM + Tools (5-15 iterations)
+  +-- UNKNOWN        -> Ask one clarifying question.
 
-Only conversational responses go directly to the LLM.
-Everything else becomes an action.
+Planner Rules:
+  - Only creates plans if tools are required.
+  - NEVER plans for conversation, writing, translation, summarization, explanation.
+
+Tool Gate:
+  - Before any tool call: "Can LLM answer without touching the OS?"
+  - If YES -> do NOT use tools.
+  - If NO  -> use the minimum number of tools.
 """
 
 import logging
@@ -14,7 +27,7 @@ import asyncio
 from typing import Optional, AsyncIterator
 
 from core.models import Intent, Plan, PlanStep, ReasoningState
-from core.intent_engine import IntentEngine
+from core.intent_router import IntentRouter, Route, IntentRouteResult
 from core.tool_registry import ToolRegistry
 from core.planner import Planner
 from core.reasoning_engine import ReasoningEngine
@@ -29,7 +42,7 @@ logger = logging.getLogger(__name__)
 class AgentRuntime:
 
     def __init__(self, tool_registry: ToolRegistry,
-                 intent_engine: IntentEngine,
+                 intent_router: IntentRouter,
                  planner: Planner,
                  reasoning_engine: ReasoningEngine,
                  observation_engine: ObservationEngine,
@@ -38,7 +51,7 @@ class AgentRuntime:
                  ollama=None, memory_service=None,
                  conversation_service=None, bridge=None):
         self.tool_registry = tool_registry
-        self.intent_engine = intent_engine
+        self.intent_router = intent_router
         self.planner = planner
         self.reasoning_engine = reasoning_engine
         self.observation_engine = observation_engine
@@ -52,101 +65,44 @@ class AgentRuntime:
         self._current_plan: Optional[Plan] = None
 
     async def process(self, text: str) -> Optional[str]:
-        """
-        Process a user message through the full agent pipeline.
+        route_result = await self.intent_router.classify(text)
+        self._emit("intent_detected",
+            f"Route: {route_result.route.value.upper()} — {route_result.explanation}",
+            {"route": route_result.route.value,
+             "confidence": route_result.confidence,
+             "tool": route_result.suggested_tool or "",
+             "explanation": route_result.explanation})
 
-        Returns:
-          str | None — A text response if the intent was handled.
-                      Returns None for chat intents (streaming handled by bridge).
-        """
-        intent = await self.intent_engine.classify(text)
-        self._emit("intent_detected", intent.explanation, {
-            "type": intent.type,
-            "tool": intent.tool_name,
-            "confidence": intent.confidence,
-        })
+        logger.info("INTENT ROUTE: %s (conf=%.2f, tool=%s, explanation=%s)",
+                     route_result.route.value, route_result.confidence,
+                     route_result.suggested_tool, route_result.explanation)
 
-        logger.info("Intent: %s (tool=%s, conf=%.2f)", intent.type, intent.tool_name, intent.confidence)
+        if route_result.route == Route.KNOWLEDGE:
+            return await self._handle_knowledge(text, route_result)
 
-        if intent.type == "knowledge":
-            return await self._handle_knowledge(text, intent)
+        if route_result.route == Route.DESKTOP_ACTION:
+            return await self._handle_desktop_action(text, route_result)
 
-        if intent.type == "complex":
-            return await self._handle_complex(text, intent)
+        if route_result.route == Route.MIXED_TASK:
+            return await self._handle_mixed_task(text, route_result)
 
-        if intent.type == "tool":
-            return await self._handle_tool(intent)
+        return await self._handle_unknown(text)
 
-        return None
+    # ── Route: KNOWLEDGE ─────────────────────────────────────────────────
 
-    async def _handle_tool(self, intent: Intent) -> str:
-        tool = self.tool_registry.get(intent.tool_name) if intent.tool_name else None
-        if not tool:
-            fallback = await self._try_fallback(intent)
-            if fallback:
-                return fallback
-
-            self._emit("error", f"Tool '{intent.tool_name}' not found")
-            return f"Sorry, Sir. The '{intent.tool_name}' tool is not available."
-
-        risk = self.permission_manager.assess_risk(intent.tool_name, intent.parameters)
-        if risk.value == "high":
-            self._emit("executing", f"Requires approval: {intent.tool_name}", {"risk": "high"})
-            ok = await self.permission_manager.request_approval(
-                intent.tool_name, intent.parameters, intent.explanation,
-            )
-            if not ok:
-                self._emit("error", f"High-risk action denied: {intent.tool_name}")
-                return f"Denied, Sir. {intent.explanation} requires confirmation."
-
-        self._emit("tool_selected", intent.tool_name)
-        self._emit("executing", f"Executing {intent.tool_name}...")
-
-        obs = await tool.execute(intent.parameters)
-        await self.observation_engine.observe(intent.tool_name, intent.parameters, obs)
-
-        if obs.success:
-            self._emit("result", obs.summary())
-            response = self._format_tool_result(intent.tool_name, obs)
-            if self.memory_service:
-                await self.memory_service.store_workflow(
-                    intent.explanation,
-                    [{"tool": intent.tool_name, "params": intent.parameters}],
-                    obs.summary(),
-                )
-            return response
-
-        self._emit("error", obs.stderr[:200])
-        reflection, action = await self.reflection_engine.reflect(
-            intent.tool_name,
-            {"success": obs.success, "exit_code": obs.exit_code, "stderr": obs.stderr, "stdout": obs.stdout},
-            intent.explanation,
-        )
-        logger.info("Reflection: %s → %s", reflection, action)
-
-        if action in ("retry", "retry_alt"):
-            self._emit("executing", f"Retrying {intent.tool_name}...")
-            obs2 = await tool.execute(intent.parameters)
-            await self.observation_engine.observe(intent.tool_name + "_retry", intent.parameters, obs2)
-            if obs2.success:
-                self._emit("result", obs2.summary())
-                return self._format_tool_result(intent.tool_name, obs2)
-            return f"Failed after retry: {obs2.stderr[:200]}"
-
-        return f"Failed: {obs.stderr[:300]}"
-
-    async def _handle_knowledge(self, text: str, intent: Intent) -> str:
+    async def _handle_knowledge(self, text: str, route: IntentRouteResult) -> str:
         if not self.ollama:
             return "I don't have an LLM available to answer that, Sir."
 
-        self._emit("executing", "Thinking...", {"mode": "knowledge"})
+        self._emit("executing", "Responding with LLM (no tools needed)",
+                     {"mode": "knowledge", "route": "knowledge"})
         try:
             system = (
                 "You are AETHER, an autonomous desktop AI agent. "
                 "Answer the user's question concisely and accurately. "
                 "Use markdown formatting when helpful. "
-                "If the user asks about performing an action, use your tools — "
-                "do not just explain how to do it."
+                "This is a PURE KNOWLEDGE request. Do NOT use any tools. "
+                "Do NOT suggest running commands. Just answer with your knowledge."
             )
             if self.memory_service:
                 memories = await self.memory_service.get_relevant_memories(text)
@@ -155,45 +111,55 @@ class AgentRuntime:
                     system += f"\n\nRelevant context from memory:\n{memory_text}"
 
             result = await self.ollama.generate(text, system=system)
-            self._emit("result", result[:200])
+            self._emit("result", f"LLM response ({len(result)} chars)")
             return result
         except Exception as e:
-            logger.error("Knowledge Q&A failed: %s", e)
+            logger.error("Knowledge handler failed: %s", e)
             return f"Failed to answer: {e}"
 
-    async def _handle_complex(self, text: str, intent: Intent) -> str:
-        self._emit("planning", f"Creating plan for: {text[:80]}")
+    # ── Route: DESKTOP_ACTION ────────────────────────────────────────────
 
-        plan = await self.planner.create_plan(text)
+    async def _handle_desktop_action(self, text: str, route: IntentRouteResult) -> str:
+        self._emit("planning", f"Creating plan for desktop action: {text[:80]}",
+                     {"route": "desktop_action"})
+
+        plan = await self.planner.create_plan(text, strict=True)
         self._current_plan = plan
 
         if not plan.steps:
-            return "I couldn't break that down into steps, Sir."
-
-        if self.memory_service:
-            self.memory_service.set_task(
-                text,
-                [s.description for s in plan.steps],
-            )
+            if self.ollama:
+                self._emit("executing", "Falling back to LLM — no actionable steps",
+                             {"route": "desktop_action"})
+                return await self.ollama.generate(text,
+                    system="The request requires no tools. Answer directly.")
+            return "I couldn't determine what action to take, Sir."
 
         plan.status = "running"
         steps_desc = " → ".join(s.description for s in plan.steps)
-        self._emit("plan_created", f"Plan: {steps_desc}",
-                     {"steps": [s.__dict__ for s in plan.steps]})
+        self._emit("plan_created", f"Desktop action plan: {steps_desc}",
+                     {"steps": [s.__dict__ for s in plan.steps], "route": "desktop_action"})
+
+        if self.memory_service:
+            self.memory_service.set_task(text, [s.description for s in plan.steps])
 
         results = []
         async for state in self.reasoning_engine.run_loop(
-            context=f"Task: {text}\nPlan: {steps_desc}",
+            context=f"Desktop action: {text}\nPlan: {steps_desc}",
             plan=plan,
+            max_iterations=5,
         ):
             if state.selected_tool:
                 obs = state.observation or {}
                 success = obs.get("success", False) if isinstance(obs, dict) else True
                 step_result = "✓" if success else "✗"
                 results.append(f"{step_result} {state.thought}")
+            if state.is_complete:
+                break
 
         plan.status = "completed"
-        self._emit("plan_complete", f"Completed {len(results)} steps")
+        self._emit("plan_complete",
+            f"Completed {len(results)} step(s)",
+            {"route": "desktop_action"})
 
         if self.memory_service:
             await self.memory_service.store_workflow(
@@ -203,39 +169,119 @@ class AgentRuntime:
             )
             self.memory_service.clear_working()
 
+        if not results:
+            return "Done, Sir."
+
+        summary = "\n".join(f"  {r}" for r in results)
+        return f"Done, Sir.\n{summary}"
+
+    # ── Route: MIXED_TASK ────────────────────────────────────────────────
+
+    async def _handle_mixed_task(self, text: str, route: IntentRouteResult) -> str:
+        self._emit("planning", f"Creating plan for multi-step task: {text[:80]}",
+                     {"route": "mixed_task"})
+
+        plan = await self.planner.create_plan(text, strict=False)
+        self._current_plan = plan
+
+        if not plan.steps:
+            if self.ollama:
+                self._emit("executing", "Falling back to LLM — no actionable steps",
+                             {"route": "mixed_task"})
+                return await self._handle_knowledge(text, route)
+            return "I couldn't break that down, Sir."
+
+        plan.status = "running"
+        steps_desc = " → ".join(s.description for s in plan.steps)
+        self._emit("plan_created", f"Mixed task plan: {steps_desc}",
+                     {"steps": [s.__dict__ for s in plan.steps], "route": "mixed_task"})
+
+        if self.memory_service:
+            self.memory_service.set_task(text, [s.description for s in plan.steps])
+
+        results = []
+        async for state in self.reasoning_engine.run_loop(
+            context=f"Task: {text}\nPlan: {steps_desc}",
+            plan=plan,
+            max_iterations=15,
+        ):
+            if state.selected_tool:
+                obs = state.observation or {}
+                success = obs.get("success", False) if isinstance(obs, dict) else True
+                step_result = "✓" if success else "✗"
+                results.append(f"{step_result} {state.thought}")
+            elif state.thought and not state.selected_tool:
+                results.append(f"  {state.thought}")
+            if state.is_complete:
+                break
+
+        plan.status = "completed"
+        self._emit("plan_complete",
+            f"Completed {len(results)} step(s)",
+            {"route": "mixed_task"})
+
+        if self.memory_service:
+            await self.memory_service.store_workflow(
+                text,
+                [{"tool": s.tool_name, "params": s.parameters} for s in plan.steps],
+                "\n".join(results),
+            )
+            self.memory_service.clear_working()
+
+        if not results:
+            return "Done, Sir."
+
         summary = "\n".join(f"  {r}" for r in results)
         return f"Completed, Sir.\n{summary}"
 
-    async def _try_fallback(self, intent: Intent) -> Optional[str]:
-        if not intent.tool_name or not self.ollama:
-            return None
-        tool_obj = self.tool_registry.get(intent.tool_name)
-        if tool_obj:
-            return None
-        tools_desc = "\n".join(t["name"] for t in self.tool_registry.list_tools())
-        prompt = (
-            f"The tool '{intent.tool_name}' was requested but is not available.\n"
-            f"Available tools: {tools_desc}\n\n"
-            f"Can any available tool fulfill the request: {intent.explanation}?\n"
-            f"Respond: tool_name or 'none'"
-        )
-        try:
-            result = await self.ollama.generate(prompt, system="You map requests to available tools.")
-            result = result.strip().lower()
-            tool_names = [t["name"] for t in self.tool_registry.list_tools()]
-            if result in tool_names:
-                return None
-        except:
-            pass
-        return None
+    # ── Route: UNKNOWN ───────────────────────────────────────────────────
 
-    def _format_tool_result(self, tool_name: str, obs: ToolObservation) -> str:
-        if obs.success:
-            summary = obs.summary()
-            if len(summary) > 500:
-                summary = summary[:497] + "..."
-            return f"{summary}"
-        return f"Failed: {obs.stderr[:300]}"
+    async def _handle_unknown(self, text: str) -> str:
+        self._emit("executing",
+            "Request unclear — asking for clarification",
+            {"route": "unknown"})
+        return (
+            "I'm not sure what you'd like me to do, Sir.\n\n"
+            "Here's what I can help with:\n\n"
+            "**Knowledge** — Ask me anything (explain, summarize, translate, write code)\n"
+            "**Desktop Actions** — Open apps, run commands, manage files, system control\n"
+            "**Mixed Tasks** — Multi-step tasks combining analysis and actions\n\n"
+            "For example:\n"
+            "  • \"What is Python?\"\n"
+            "  • \"Open Chrome\"\n"
+            "  • \"Summarize this file then save it\"\n"
+            "  • \"Create a folder called projects\""
+        )
+
+    # ── Tool Gate ────────────────────────────────────────────────────────
+
+    async def _tool_gate(self, tool_name: str, params: dict, context: str) -> bool:
+        """
+        Before calling a tool, check: can the LLM answer without touching the OS?
+        If YES -> do NOT use tools. Return False.
+        If NO  -> use the tool. Return True.
+        """
+        if not self.ollama:
+            return True
+
+        try:
+            prompt = (
+                f"Can you answer this request using ONLY your existing knowledge, "
+                f"WITHOUT running any commands or using any tools?\n\n"
+                f"Request: {context}\n"
+                f"Proposed tool: {tool_name}\n"
+                f"Proposed parameters: {params}\n\n"
+                f"Reply EXACTLY: YES or NO"
+            )
+            result = await self.ollama.generate(prompt,
+                system="You decide whether a tool is needed. Be strict.")
+            answer = result.strip().upper()
+            if answer.startswith("NO"):
+                return True
+            return False
+        except Exception as e:
+            logger.warning("Tool gate check failed (defaulting to allow): %s", e)
+            return True
 
     def _emit(self, event_type: str, description: str, metadata: dict = None):
         if self.bridge:
