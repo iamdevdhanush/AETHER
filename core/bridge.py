@@ -67,6 +67,15 @@ class QMLBridge(QObject):
     conversationLoaded = Signal("QVariantList")
     conversationCreated = Signal(str, str)    # id, title
 
+    # ── Conversation management signals ───────────────────────────────────
+    conversationRenamed = Signal(str, str)    # id, new_title
+    conversationDeleted = Signal(str)         # id
+    conversationDuplicated = Signal(str, str) # new_id, title
+    conversationMarkdownExported = Signal(str) # file_path
+    conversationJSONExported = Signal(str)    # file_path
+    conversationTitleGenerated = Signal(str, str) # id, title
+    conversationSearchResults = Signal("QVariantList")
+
     # ── Plugin signals ────────────────────────────────────────────────────
     pluginResult = Signal(str, str)           # plugin_name, result
     pluginError = Signal(str, str)
@@ -240,11 +249,97 @@ class QMLBridge(QObject):
 
     @Slot(str)
     def deleteConversation(self, conversation_id: str):
+        """Cascade delete conversation + messages + timeline + memory refs."""
         worker = AsyncWorker(
             self.conversation_service.delete_conversation(conversation_id)
         )
         worker.finished.connect(lambda: self._cleanup_worker(worker))
+        worker.finished.connect(lambda: self.conversationDeleted.emit(conversation_id))
         worker.finished.connect(self.loadConversations)
+        if conversation_id == self._current_conversation_id:
+            self._current_conversation_id = None
+        self._active_workers.append(worker)
+        worker.start()
+
+    @Slot(str, str)
+    def renameConversation(self, conversation_id: str, new_title: str):
+        worker = AsyncWorker(
+            self.conversation_service.rename_conversation(conversation_id, new_title)
+        )
+        worker.result.connect(lambda ok: (
+            self.conversationRenamed.emit(conversation_id, new_title) if ok else None,
+            self.loadConversations() if ok else None,
+        ))
+        worker.finished.connect(lambda: self._cleanup_worker(worker))
+        self._active_workers.append(worker)
+        worker.start()
+
+    @Slot(str)
+    def duplicateConversation(self, conversation_id: str):
+        worker = AsyncWorker(
+            self.conversation_service.duplicate_conversation(conversation_id)
+        )
+        worker.result.connect(lambda new_conv: (
+            self.conversationDuplicated.emit(new_conv["id"], new_conv["title"]),
+            self.loadConversations(),
+        ) if new_conv else None)
+        worker.finished.connect(lambda: self._cleanup_worker(worker))
+        self._active_workers.append(worker)
+        worker.start()
+
+    @Slot(str)
+    def exportConversationMarkdown(self, conversation_id: str):
+        worker = AsyncWorker(
+            self.conversation_service.export_conversation_markdown(conversation_id)
+        )
+        def _save(result):
+            try:
+                conv = self.db.get_conversation(conversation_id)
+                safe_title = conv["title"] if conv else "conversation"
+                safe_title = "".join(c if c.isalnum() or c in " _-" else "_" for c in safe_title)
+                path = self.project_root / "exports"
+                path.mkdir(exist_ok=True)
+                filepath = path / f"{safe_title}_{conversation_id[:8]}.md"
+                filepath.write_text(result, encoding="utf-8")
+                self.conversationMarkdownExported.emit(str(filepath))
+                self.statusMessage.emit(f"Exported: {filepath.name}")
+            except Exception as e:
+                self.errorOccurred.emit(f"Export failed: {e}")
+            self._cleanup_worker(worker)
+        worker.result.connect(_save)
+        self._active_workers.append(worker)
+        worker.start()
+
+    @Slot(str)
+    def exportConversationJSON(self, conversation_id: str):
+        worker = AsyncWorker(
+            self.conversation_service.export_conversation_json(conversation_id)
+        )
+        def _save(result):
+            try:
+                conv = self.db.get_conversation(conversation_id)
+                safe_title = conv["title"] if conv else "conversation"
+                safe_title = "".join(c if c.isalnum() or c in " _-" else "_" for c in safe_title)
+                path = self.project_root / "exports"
+                path.mkdir(exist_ok=True)
+                filepath = path / f"{safe_title}_{conversation_id[:8]}.json"
+                filepath.write_text(result, encoding="utf-8")
+                self.conversationJSONExported.emit(str(filepath))
+                self.statusMessage.emit(f"Exported: {filepath.name}")
+            except Exception as e:
+                self.errorOccurred.emit(f"Export failed: {e}")
+            self._cleanup_worker(worker)
+        worker.result.connect(_save)
+        self._active_workers.append(worker)
+        worker.start()
+
+    @Slot(str)
+    def searchConversations(self, query: str):
+        worker = AsyncWorker(
+            self.conversation_service.search_conversations(query)
+        )
+        worker.result.connect(lambda r: self.conversationSearchResults.emit(r))
+        worker.finished.connect(lambda: self._cleanup_worker(worker))
         self._active_workers.append(worker)
         worker.start()
 

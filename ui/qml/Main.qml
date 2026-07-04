@@ -61,6 +61,12 @@ Window {
         function onConversationsLoaded(convs)    { sidebar.updateConversations(convs) }
         function onConversationLoaded(messages)  { conversationPanel.loadMessages(messages) }
         function onConversationCreated(id, title){ bridge.loadConversations() }
+        function onConversationRenamed(id, title){ sidebar.updateConversationTitle(id, title); bridge.loadConversations() }
+        function onConversationDeleted(id)       { bridge.loadConversations() }
+        function onConversationDuplicated(id, t) { bridge.loadConversations() }
+        function onConversationSearchResults(r)  { sidebar.showSearchResults(r) }
+        function onConversationMarkdownExported(p){ topBar.setStatus("Exported: " + p.split('/').pop().split('\\\\').pop()) }
+        function onConversationJSONExported(p)   { topBar.setStatus("Exported: " + p.split('/').pop().split('\\\\').pop()) }
         function onSystemStatsUpdated(stats)     { topBar.updateStats(stats) }
         function onPluginsLoaded(plugins)        { /* lazy */ }
         function onTimelineEventAdded(event)     { timelinePanel.addEvent(event) }
@@ -126,7 +132,7 @@ Window {
                 id: sidebar
 
                 // FIXED MN-1: visible uses a dedicated bool, not .running on Behavior
-                Layout.preferredWidth: root.sidebarOpen ? 260 : 0
+                Layout.preferredWidth: root.sidebarOpen ? 250 : 0
                 Layout.fillHeight: true
                 clip: true
                 visible: root.sidebarOpen || root.sidebarAnimating
