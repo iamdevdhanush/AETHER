@@ -15,7 +15,6 @@ Rectangle {
             "description": event.description || "",
             "timestamp":   event.timestamp || Date.now(),
         })
-        // Cap at 200 events
         while (timelineModel.count > 200) {
             timelineModel.remove(timelineModel.count - 1)
         }
@@ -42,7 +41,7 @@ Rectangle {
                 font.pixelSize: 14
             }
             Text {
-                text: "Timeline"
+                text: "Agent Timeline"
                 color: root.themeObj.textSec
                 font.pixelSize: 11
                 font.letterSpacing: 1
@@ -119,10 +118,33 @@ Rectangle {
                     anchors.verticalCenter: parent.verticalCenter
                     color: _dotColor(model.eventType)
 
-                    // Pulse for recent events
                     SequentialAnimation on scale {
                         loops: 1
                         NumberAnimation { from: 1.5; to: 1.0; duration: 400; easing.type: Easing.OutBounce }
+                    }
+                }
+
+                // Label for the step type
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.leftMargin: 32
+                    anchors.top: parent.top
+                    anchors.topMargin: 6
+                    height: 16
+                    radius: 3
+                    color: _dotColor(model.eventType)
+                    opacity: 0.15
+                    visible: _stepLabel(model.eventType) !== ""
+
+                    Text {
+                        anchors.left: parent.left
+                        anchors.leftMargin: 5
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: _stepLabel(model.eventType)
+                        color: _dotColor(model.eventType)
+                        font.pixelSize: 8
+                        font.weight: Font.Bold
+                        font.letterSpacing: 0.5
                     }
                 }
 
@@ -140,6 +162,7 @@ Rectangle {
                         font.pixelSize: 11
                         elide: Text.ElideRight
                         Layout.fillWidth: true
+                        Layout.topMargin: 12
                     }
 
                     Text {
@@ -164,9 +187,15 @@ Rectangle {
                         Layout.alignment: Qt.AlignHCenter
                     }
                     Text {
-                        text: "No events yet"
+                        text: "Agent timeline"
                         color: root.themeObj.textMuted
                         font.pixelSize: 11
+                        Layout.alignment: Qt.AlignHCenter
+                    }
+                    Text {
+                        text: "Action flow appears here"
+                        color: root.themeObj.textMuted
+                        font.pixelSize: 9
                         Layout.alignment: Qt.AlignHCenter
                     }
                 }
@@ -178,10 +207,25 @@ Rectangle {
         switch (eventType) {
             case "user_message":    return root.themeObj.user
             case "ai_response":     return root.themeObj.assistant
+            case "intent_detected": return "#40B4FF"
+            case "tool_selected":   return root.themeObj.accent
+            case "executing":       return root.themeObj.warning
+            case "result":          return root.themeObj.success
             case "plugin_execute":  return root.themeObj.accent
             case "error":           return root.themeObj.error
             case "system":          return root.themeObj.warning
             default:                return root.themeObj.textMuted
+        }
+    }
+
+    function _stepLabel(eventType) {
+        switch (eventType) {
+            case "intent_detected": return "INTENT"
+            case "tool_selected":   return "TOOL"
+            case "executing":       return "EXEC"
+            case "result":          return "DONE"
+            case "error":           return "FAIL"
+            default:                return ""
         }
     }
 

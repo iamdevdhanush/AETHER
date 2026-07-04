@@ -1,6 +1,7 @@
 """
 AETHER Core Application
 Orchestrates startup, initialization, and teardown.
+Creates the Agent Runtime and wires it into the QML bridge.
 """
 
 import logging
@@ -15,6 +16,7 @@ from PySide6.QtQml import QQmlApplicationEngine, qmlRegisterType, qmlRegisterSin
 from ui.splash import SplashScreen
 from core.initializer import SystemInitializer
 from core.bridge import QMLBridge
+from core.agent_runtime import AgentRuntime
 from database.db_manager import DatabaseManager
 from services.ollama_service import OllamaService
 from services.plugin_manager import PluginManager
@@ -29,6 +31,7 @@ class AetherApplication(QObject):
     """
     Top-level application coordinator.
     Manages splash → init → workspace lifecycle.
+    Creates the Agent Runtime that processes all user messages.
     """
 
     initialization_complete = Signal()
@@ -41,6 +44,7 @@ class AetherApplication(QObject):
         self.splash: Optional[SplashScreen] = None
         self.engine: Optional[QQmlApplicationEngine] = None
         self.bridge: Optional[QMLBridge] = None
+        self.agent_runtime: Optional[AgentRuntime] = None
 
         # Core services
         self.db: Optional[DatabaseManager] = None
@@ -58,8 +62,6 @@ class AetherApplication(QObject):
         """Show splash and begin initialization."""
         self.splash = SplashScreen(self.project_root)
         self.splash.show()
-
-        # Delay to let splash render
         QTimer.singleShot(200, self._begin_initialization)
 
     def _begin_initialization(self):
@@ -110,7 +112,7 @@ class AetherApplication(QObject):
 
         self.engine = QQmlApplicationEngine()
 
-        # Create bridge connecting QML ↔ Python services
+        # Create bridge placeholder (agent_runtime set after bridge creation)
         self.bridge = QMLBridge(
             db=self.db,
             ollama=self.ollama,
@@ -119,7 +121,18 @@ class AetherApplication(QObject):
             memory_service=self.memory_service,
             system_monitor=self.system_monitor,
             project_root=self.project_root,
+            agent_runtime=None,
         )
+
+        # Create Agent Runtime with reference to bridge
+        self.agent_runtime = AgentRuntime(
+            ollama=self.ollama,
+            plugin_manager=self.plugin_manager,
+            conversation_service=self.conversation_service,
+            memory_service=self.memory_service,
+            bridge=self.bridge,
+        )
+        self.bridge.agent_runtime = self.agent_runtime
 
         # Expose bridge to QML
         self.engine.rootContext().setContextProperty("bridge", self.bridge)

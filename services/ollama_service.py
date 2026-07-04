@@ -171,6 +171,63 @@ class OllamaService:
             result += chunk
         return result
 
+    async def extract_arguments(self, text: str, plugin_name: str) -> dict:
+        """
+        Extract structured arguments from natural language for a given plugin.
+        Uses Ollama to parse the user's request and return a payload dict.
+
+        Returns:
+            dict suitable for plugin.execute(), e.g. {"input": "...", "path": "..."}
+        """
+        prompt = (
+            f"Extract arguments for the '{plugin_name}' plugin from this user request.\n\n"
+            f"User request: \"{text}\"\n\n"
+            f"Return a JSON object with the arguments needed to execute the plugin.\n"
+            f"Always include an 'input' field with the cleaned command.\n"
+            f"For filesystem: use 'action' (list/read/write/delete/mkdir) and 'path'.\n"
+            f"For browser: use 'input' with the URL or search query.\n"
+            f"For terminal: use 'input' with the shell command.\n"
+            f"For vscode: use 'input' with the file/directory path (empty if just launching).\n\n"
+            f"Respond with ONLY the JSON object, no other text."
+        )
+
+        try:
+            result = await self.generate(
+                prompt,
+                system="You extract structured arguments from user requests. Return only JSON.",
+            )
+            result = result.strip()
+            if result.startswith("```"):
+                lines = result.split("\n")
+                if lines[0].startswith("```"):
+                    lines = lines[1:]
+                if lines and lines[-1].strip().startswith("```"):
+                    lines = lines[:-1]
+                result = "\n".join(lines)
+
+            import json as _json
+            args = _json.loads(result)
+            if isinstance(args, dict):
+                return args
+        except Exception as e:
+            logger.warning("Argument extraction failed for %s: %s", plugin_name, e)
+
+        return {"input": text}
+
+    async def summarize(self, text: str, max_length: int = 200) -> str:
+        """Summarize text concisely."""
+        prompt = (
+            f"Summarize the following text in {max_length} characters or less:\n\n{text}"
+        )
+        try:
+            return await self.generate(
+                prompt,
+                system="You are a precise summarizer. Be concise.",
+            )
+        except Exception as e:
+            logger.warning("Summarization failed: %s", e)
+            return text[:max_length]
+
     async def close(self):
         if self._client and not self._client.is_closed:
             await self._client.aclose()

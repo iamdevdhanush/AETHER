@@ -2,6 +2,9 @@
 AETHER QML Bridge
 All QML ↔ Python communication flows through this object.
 Exposed to QML as `bridge`.
+
+Every user message routes through the Agent Runtime:
+  Intent → Selected Tool → Executing → Result
 """
 
 import logging
@@ -38,7 +41,6 @@ class AsyncWorker(QThread):
             self.error.emit(str(e))
         finally:
             if loop is not None and not loop.is_closed():
-                # Cancel any remaining pending tasks before closing
                 pending = asyncio.all_tasks(loop)
                 for task in pending:
                     task.cancel()
@@ -55,8 +57,8 @@ class AsyncWorker(QThread):
 
 class QMLBridge(QObject):
     """
-    Central bridge between QML UI and Python backend services.
-    All signals/slots that QML uses live here.
+    Central bridge between QML UI and Python backend.
+    Routes through AgentRuntime for intent→tool→result flow.
     """
 
     # ── Conversation signals ──────────────────────────────────────────────
@@ -90,7 +92,8 @@ class QMLBridge(QObject):
     statusMessage = Signal(str)
 
     def __init__(self, db, ollama, plugin_manager, conversation_service,
-                 memory_service, system_monitor, project_root: Path):
+                 memory_service, system_monitor, project_root: Path,
+                 agent_runtime=None):
         super().__init__()
         self.db = db
         self.ollama = ollama
@@ -99,6 +102,7 @@ class QMLBridge(QObject):
         self.memory_service = memory_service
         self.system_monitor = system_monitor
         self.project_root = project_root
+        self.agent_runtime = agent_runtime
 
         self._current_conversation_id: Optional[str] = None
         self._active_workers = []
@@ -116,53 +120,77 @@ class QMLBridge(QObject):
 
     @Slot(str)
     def sendMessage(self, text: str):
-        """Send a user message and stream the AI response."""
+        """
+        Entry point for all user messages from QML.
+        Routes through Agent Runtime for intent classification.
+        """
         if not text.strip():
             return
 
         text = text.strip()
-        logger.info(f"sendMessage: {text[:80]}")
+        logger.info("sendMessage: %s", text[:120])
 
-        # Add to timeline
-        self._emit_timeline_event("user_message", f"User: {text[:60]}")
+        self._emit_timeline_event("user_message", f"User: {text[:80]}")
 
-        worker = AsyncWorker(
-            self._async_send_message(text)
-        )
+        worker = AsyncWorker(self._async_send_message(text))
         worker.error.connect(lambda e: self.streamError.emit(e))
         worker.finished.connect(lambda: self._cleanup_worker(worker))
         self._active_workers.append(worker)
         worker.start()
 
     async def _async_send_message(self, text: str):
-        """Async implementation of message sending with streaming."""
-        # Emit user message to UI
+        """
+        Process message through Agent Runtime first.
+        Falls back to streaming chat for conversation intents.
+        """
         self.messageReceived.emit("user", text)
 
-        # Ensure conversation exists
+        conv_id = await self._ensure_conversation(text)
+        if not conv_id:
+            return
+
+        await self.conversation_service.add_message(
+            conversation_id=conv_id, role="user", content=text,
+        )
+
+        memories = await self.memory_service.get_relevant_memories(text)
+
+        if self.agent_runtime:
+            try:
+                result = await self.agent_runtime.process(text)
+            except Exception as e:
+                logger.exception("Agent runtime error")
+                self.streamError.emit(str(e))
+                return
+
+            if result is not None:
+                self.messageReceived.emit("assistant", result)
+                self.streamComplete.emit()
+
+                await self.conversation_service.add_message(
+                    conversation_id=conv_id,
+                    role="assistant",
+                    content=result,
+                )
+                await self.memory_service.extract_and_store(text, result)
+                return
+
+        await self._stream_chat(text, conv_id, memories)
+
+    async def _ensure_conversation(self, text: str) -> Optional[str]:
         if not self._current_conversation_id:
             conv = await self.conversation_service.create_conversation(
-                title=text[:50]
+                title=text[:50],
             )
             self._current_conversation_id = conv["id"]
             self.conversationCreated.emit(conv["id"], conv["title"])
+        return self._current_conversation_id
 
-        # Save user message
-        await self.conversation_service.add_message(
-            conversation_id=self._current_conversation_id,
-            role="user",
-            content=text,
-        )
+    async def _stream_chat(self, text: str, conv_id: str,
+                           memories: list[dict]):
+        """Stream a conversational AI response through Ollama."""
+        history = await self.conversation_service.get_messages(conv_id)
 
-        # Get memory context
-        memories = await self.memory_service.get_relevant_memories(text)
-
-        # Build message history for context
-        history = await self.conversation_service.get_messages(
-            self._current_conversation_id
-        )
-
-        # Stream AI response
         full_response = ""
         chunk_count = 0
         try:
@@ -171,7 +199,6 @@ class QMLBridge(QObject):
                 memories=memories,
             ):
                 chunk_count += 1
-                logger.debug("Stream chunk #%s: %r", chunk_count, chunk[:100])
                 self.streamChunk.emit(chunk)
                 full_response += chunk
         except Exception as e:
@@ -180,24 +207,23 @@ class QMLBridge(QObject):
             return
 
         logger.info(
-            "Stream complete: %s chunks, %s chars total",
-            chunk_count,
-            len(full_response),
+            "Stream complete: %s chunks, %s chars",
+            chunk_count, len(full_response),
         )
         self.streamComplete.emit()
 
-        # Save assistant message
         await self.conversation_service.add_message(
-            conversation_id=self._current_conversation_id,
+            conversation_id=conv_id,
             role="assistant",
             content=full_response,
         )
 
-        # Extract and store memories
         await self.memory_service.extract_and_store(text, full_response)
 
-        # Timeline event
-        self._emit_timeline_event("ai_response", f"AI responded ({len(full_response)} chars)")
+        self._emit_timeline_event(
+            "ai_response",
+            f"AI responded ({len(full_response)} chars)",
+        )
 
     @Slot()
     def loadConversations(self):
@@ -330,7 +356,6 @@ class QMLBridge(QObject):
     def cleanup(self):
         """Shut down workers, timers, and connections."""
         self._stats_timer.stop()
-        # Wait for all active workers to finish
         for worker in list(self._active_workers):
             if worker.isRunning():
                 worker.quit()
