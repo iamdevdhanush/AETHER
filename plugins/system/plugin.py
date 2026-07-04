@@ -1,5 +1,5 @@
 """
-AETHER System Plugin
+AETHER System Tool
 System power actions and screen capture.
 """
 
@@ -7,55 +7,58 @@ import asyncio
 import logging
 import sys
 import subprocess
+import time
 from pathlib import Path
 from datetime import datetime
 
-from models.plugin_base import PluginBase
+from models.tool_base import ToolBase, ToolObservation
 
 logger = logging.getLogger(__name__)
 
 
-class SystemPlugin(PluginBase):
+class SystemPlugin(ToolBase):
 
-    def initialize(self):
-        logger.info("System plugin initialized")
+    def name(self) -> str:
+        return "system"
 
-    async def execute(self, payload: dict) -> str:
-        input_str = payload.get("input", "").strip().lower()
+    def description(self) -> str:
+        return "System power actions: shutdown, restart, sleep, lock, screenshot, hibernate"
+
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "input": {"type": "string", "description": "Action: shutdown, restart, sleep, hibernate, lock, screenshot"},
+            },
+            "required": ["input"],
+        }
+
+    async def execute(self, params: dict) -> ToolObservation:
+        start = time.time()
+        input_str = params.get("input", "").strip().lower()
 
         if "screenshot" in input_str or "capture" in input_str:
-            return await self._take_screenshot()
-
+            return await self._take_screenshot(start)
         if "shutdown" in input_str:
-            return await self._power_action("shutdown")
-
+            return await self._power_action("shutdown", start)
         if "restart" in input_str or "reboot" in input_str:
-            return await self._power_action("restart")
-
+            return await self._power_action("restart", start)
         if "sleep" in input_str:
-            return await self._power_action("sleep")
-
+            return await self._power_action("sleep", start)
         if "hibernate" in input_str:
-            return await self._power_action("hibernate")
-
+            return await self._power_action("hibernate", start)
         if "lock" in input_str:
-            return await self._power_action("lock")
-
+            return await self._power_action("lock", start)
         if "logoff" in input_str or "logout" in input_str:
-            return await self._power_action("logoff")
+            return await self._power_action("logoff", start)
 
-        return (
-            "Available system commands:\n"
-            "  - screenshot / capture screen\n"
-            "  - shutdown\n"
-            "  - restart / reboot\n"
-            "  - sleep\n"
-            "  - hibernate\n"
-            "  - lock\n"
-            "  - logoff / logout"
+        elapsed = (time.time() - start) * 1000
+        return ToolObservation(
+            stdout="Available: screenshot, shutdown, restart, sleep, hibernate, lock, logoff",
+            exit_code=0, success=True, execution_time_ms=elapsed,
         )
 
-    async def _take_screenshot(self) -> str:
+    async def _take_screenshot(self, start: float) -> ToolObservation:
         shot_dir = Path.home() / "Pictures" / "AETHER_screenshots"
         shot_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -64,124 +67,76 @@ class SystemPlugin(PluginBase):
         try:
             if sys.platform == "win32":
                 proc = await asyncio.create_subprocess_exec(
-                    "powershell",
-                    "-Command",
+                    "powershell", "-Command",
                     f"Add-Type -AssemblyName System.Windows.Forms; "
                     f"[System.Windows.Forms.Screen]::PrimaryScreen.Bounds | "
-                    f"ForEach-Object {{ "
-                    f"  $bmp = New-Object System.Drawing.Bitmap $_.Width, $_.Height; "
-                    f"  $gfx = [System.Drawing.Graphics]::FromImage($bmp); "
-                    f"  $gfx.CopyFromScreen($_.X, $_.Y, 0, 0, "
-                    f"    $bmp.Size, [System.Drawing.CopyPixelOperation]::SourceCopy); "
-                    f"  $bmp.Save('{filename}'); "
-                    f"  $gfx.Dispose(); $bmp.Dispose(); "
-                    f"}}",
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
+                    f"ForEach-Object {{ $bmp = New-Object System.Drawing.Bitmap $_.Width, $_.Height; "
+                    f"$gfx = [System.Drawing.Graphics]::FromImage($bmp); "
+                    f"$gfx.CopyFromScreen($_.X, $_.Y, 0, 0, $bmp.Size, "
+                    f"[System.Drawing.CopyPixelOperation]::SourceCopy); "
+                    f"$bmp.Save('{filename}'); $gfx.Dispose(); $bmp.Dispose(); }}",
+                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
                 )
-                stdout, stderr = await asyncio.wait_for(
-                    proc.communicate(), timeout=15.0,
-                )
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=15.0)
+                elapsed = (time.time() - start) * 1000
                 if filename.exists():
-                    return f"Screenshot saved: {filename}"
-                error = stderr.decode("utf-8", errors="replace").strip()
-                return f"Screenshot failed: {error or 'unknown error'}"
-
+                    return ToolObservation(stdout=f"Screenshot saved: {filename}", exit_code=0, success=True, execution_time_ms=elapsed)
+                return ToolObservation(stdout="", stderr=stderr.decode(), exit_code=1, success=False, execution_time_ms=elapsed)
             elif sys.platform == "darwin":
-                proc = await asyncio.create_subprocess_exec(
-                    "screencapture", str(filename),
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
+                proc = await asyncio.create_subprocess_exec("screencapture", str(filename))
                 await proc.wait()
+                elapsed = (time.time() - start) * 1000
                 if filename.exists():
-                    return f"Screenshot saved: {filename}"
-                return "Screenshot failed"
-
+                    return ToolObservation(stdout=f"Screenshot saved: {filename}", exit_code=0, success=True, execution_time_ms=elapsed)
+                return ToolObservation(stdout="", stderr="Screenshot failed", exit_code=1, success=False, execution_time_ms=elapsed)
             else:
-                proc = await asyncio.create_subprocess_exec(
-                    "gnome-screenshot", "-f", str(filename),
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
+                proc = await asyncio.create_subprocess_exec("gnome-screenshot", "-f", str(filename))
                 await proc.wait()
+                elapsed = (time.time() - start) * 1000
                 if filename.exists():
-                    return f"Screenshot saved: {filename}"
-                return "Screenshot failed (try installing gnome-screenshot)"
-
+                    return ToolObservation(stdout=f"Screenshot saved: {filename}", exit_code=0, success=True, execution_time_ms=elapsed)
+                return ToolObservation(stdout="", stderr="Screenshot failed", exit_code=1, success=False, execution_time_ms=elapsed)
         except Exception as e:
-            logger.error("Screenshot error: %s", e)
-            return f"Screenshot error: {e}"
+            elapsed = (time.time() - start) * 1000
+            return ToolObservation(stdout="", stderr=f"Screenshot error: {e}", exit_code=1, success=False, execution_time_ms=elapsed)
 
-    async def _power_action(self, action: str) -> str:
-        confirm_msg = {
-            "shutdown": "Shutting down system...",
-            "restart": "Restarting system...",
-            "sleep": "Putting system to sleep...",
-            "hibernate": "Hibernating system...",
-            "lock": "Locking workstation...",
-            "logoff": "Logging off...",
-        }.get(action, f"Executing {action}...")
-
+    async def _power_action(self, action: str, start: float) -> ToolObservation:
+        confirm_msg = {"shutdown": "Shutting down...", "restart": "Restarting...",
+                       "sleep": "Sleeping...", "hibernate": "Hibernating...",
+                       "lock": "Locking...", "logoff": "Logging off..."}.get(action, f"{action}...")
         try:
             if sys.platform == "win32":
-                cmds = {
-                    "shutdown": ["shutdown", "/s", "/t", "5"],
-                    "restart": ["shutdown", "/r", "/t", "5"],
-                    "sleep": ["rundll32.exe", "powrprof.dll,SetSuspendState", "Sleep"],
-                    "hibernate": ["rundll32.exe", "powrprof.dll,SetSuspendState", "Hibernate"],
-                    "lock": ["rundll32.exe", "user32.dll,LockWorkStation"],
-                    "logoff": ["shutdown", "/l"],
-                }
+                cmds = {"shutdown": ["shutdown", "/s", "/t", "5"],
+                        "restart": ["shutdown", "/r", "/t", "5"],
+                        "sleep": ["rundll32.exe", "powrprof.dll,SetSuspendState", "Sleep"],
+                        "hibernate": ["rundll32.exe", "powrprof.dll,SetSuspendState", "Hibernate"],
+                        "lock": ["rundll32.exe", "user32.dll,LockWorkStation"],
+                        "logoff": ["shutdown", "/l"]}
                 cmd = cmds.get(action)
-                if not cmd:
-                    return f"Unknown action: {action}"
-
-                subprocess.Popen(
-                    cmd,
-                    creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
-                    close_fds=True,
-                )
-
+                if cmd:
+                    subprocess.Popen(cmd, creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP, close_fds=True)
             elif sys.platform == "darwin":
-                cmds = {
-                    "shutdown": ["osascript", "-e", 'tell app "System Events" to shut down'],
-                    "restart": ["osascript", "-e", 'tell app "System Events" to restart'],
-                    "sleep": ["pmset", "sleepnow"],
-                    "lock": ["osascript", "-e", 'tell app "System Events" to sleep'],
-                    "logoff": ["osascript", "-e", 'tell app "System Events" to log out'],
-                }
+                cmds = {"shutdown": ["osascript", "-e", 'tell app "System Events" to shut down'],
+                        "restart": ["osascript", "-e", 'tell app "System Events" to restart'],
+                        "sleep": ["pmset", "sleepnow"],
+                        "lock": ["osascript", "-e", 'tell app "System Events" to sleep'],
+                        "logoff": ["osascript", "-e", 'tell app "System Events" to log out']}
                 cmd = cmds.get(action)
                 if cmd:
                     subprocess.Popen(cmd, start_new_session=True)
-
             else:
-                cmds = {
-                    "shutdown": ["systemctl", "poweroff"],
-                    "restart": ["systemctl", "reboot"],
-                    "sleep": ["systemctl", "suspend"],
-                    "hibernate": ["systemctl", "hibernate"],
-                    "lock": ["loginctl", "lock-session"],
-                    "logoff": ["loginctl", "terminate-user", str(Path.home().name)],
-                }
+                cmds = {"shutdown": ["systemctl", "poweroff"], "restart": ["systemctl", "reboot"],
+                        "sleep": ["systemctl", "suspend"], "hibernate": ["systemctl", "hibernate"],
+                        "lock": ["loginctl", "lock-session"],
+                        "logoff": ["loginctl", "terminate-user", str(Path.home().name)]}
                 cmd = cmds.get(action)
                 if cmd:
                     subprocess.Popen(cmd, start_new_session=True)
-
-            return confirm_msg
-
+            elapsed = (time.time() - start) * 1000
+            return ToolObservation(stdout=confirm_msg, exit_code=0, success=True, execution_time_ms=elapsed, system_changes=[f"system:{action}"])
         except Exception as e:
-            logger.error("Power action %s failed: %s", action, e)
-            return f"Failed to {action}: {e}"
+            elapsed = (time.time() - start) * 1000
+            return ToolObservation(stdout="", stderr=f"Failed to {action}: {e}", exit_code=1, success=False, execution_time_ms=elapsed)
 
     def shutdown(self):
-        logger.info("System plugin shut down")
-
-    def metadata(self) -> dict:
-        return {
-            "name": "system",
-            "description": "System power actions: shutdown, restart, sleep, lock, screenshot",
-            "version": "1.0.0",
-            "icon": "⚙️",
-            "category": "system",
-        }
+        logger.info("System tool shut down")

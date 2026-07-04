@@ -1,47 +1,60 @@
 """
-AETHER Memory Plugin
-Manually manage long-term memories.
+AETHER Memory Tool
+Manage AETHER's long-term memory: list, add, search, delete.
 """
 
 import logging
-from models.plugin_base import PluginBase
+import time
+from models.tool_base import ToolBase, ToolObservation
 
 logger = logging.getLogger(__name__)
 
 
-class MemoryPlugin(PluginBase):
-    """
-    Exposes memory management as a plugin.
-    Supports: list, add, delete, search, clear operations.
-    """
+class MemoryPlugin(ToolBase):
+
+    def name(self) -> str:
+        return "memory"
+
+    def description(self) -> str:
+        return "Manage AETHER's long-term memory: list, add, search, delete"
+
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "input": {"type": "string", "description": "Action: list, add <text>, search <query>, delete <id>"},
+                "action": {"type": "string", "enum": ["list", "add", "search", "delete"]},
+                "content": {"type": "string", "description": "Content to remember"},
+            },
+        }
 
     def initialize(self):
         self._db = None
-        logger.info("Memory plugin initialized")
 
     def set_db(self, db):
         self._db = db
 
-    async def execute(self, payload: dict) -> str:
+    async def execute(self, params: dict) -> ToolObservation:
+        start = time.time()
         if self._db is None:
-            return "Database not connected."
+            return ToolObservation(stdout="", stderr="Database not connected.", exit_code=1, success=False)
 
-        action = payload.get("action", "list")
-        text = payload.get("input", "").strip()
+        action = params.get("action", "")
+        text = params.get("input", "").strip()
 
         if action == "list" or (not action and not text):
-            return self._list_memories()
+            result = self._list_memories()
         elif action == "add" or text.startswith("add "):
-            content = text.removeprefix("add ").strip() or payload.get("content", "")
-            return self._add_memory(content)
+            content = text[4:].strip() if text.startswith("add ") else params.get("content", "")
+            result = self._add_memory(content)
         elif action == "search" or text.startswith("search "):
-            query = text.removeprefix("search ").strip()
-            return self._search_memories(query)
-        elif action == "clear":
-            return "Use the memory panel to clear all memories."
+            query = text[7:].strip() if text.startswith("search ") else text
+            result = self._search_memories(query)
         else:
-            # Default: treat as a search
-            return self._search_memories(text)
+            result = self._search_memories(text)
+
+        elapsed = (time.time() - start) * 1000
+        return ToolObservation(stdout=result, exit_code=0, success=True, execution_time_ms=elapsed)
 
     def _list_memories(self) -> str:
         memories = self._db.get_memories(limit=50)
@@ -49,14 +62,14 @@ class MemoryPlugin(PluginBase):
             return "No memories stored."
         lines = [f"Stored Memories ({len(memories)}):"]
         for i, mem in enumerate(memories, 1):
-            importance = "⭐" * int(mem["importance"] * 5)
-            lines.append(f"{i:2}. [{importance}] {mem['content'][:100]}")
+            stars = "⭐" * int(mem["importance"] * 5)
+            lines.append(f"{i:2}. [{stars}] {mem['content'][:100]}")
         return "\n".join(lines)
 
     def _add_memory(self, content: str) -> str:
         if not content:
             return "No content to remember."
-        mem = self._db.add_memory(content, source="manual", importance=0.8)
+        self._db.add_memory(content, source="manual", importance=0.8)
         return f"Remembered: {content[:80]}"
 
     def _search_memories(self, query: str) -> str:
@@ -71,13 +84,4 @@ class MemoryPlugin(PluginBase):
         return "\n".join(lines)
 
     def shutdown(self):
-        logger.info("Memory plugin shut down")
-
-    def metadata(self) -> dict:
-        return {
-            "name": "memory",
-            "description": "Manage AETHER's long-term memory",
-            "version": "1.0.0",
-            "icon": "🧠",
-            "category": "ai",
-        }
+        logger.info("Memory tool shut down")

@@ -2,15 +2,9 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
-// MessageBubble receives an explicit `width` from the delegate.
-// It reports its required height via `implicitHeight`.
-// The sizing chain is strictly one-directional:
-//   parent sets width → TextEdit wraps within that width
-//   → paintedHeight becomes valid → rect grows → implicitHeight propagates up
 Item {
     id: root
 
-    // implicitHeight = header row + spacing + bubble rectangle + vertical padding
     implicitHeight: headerRow.height + 6 + bubbleRect.height + 16
 
     required property var    themeObj
@@ -23,9 +17,10 @@ Item {
     readonly property bool isError:     role === "error"
     readonly property bool isSystem:    role === "system"
 
+    // Track hover at root level so copy button can respond to entire bubble hover
+    property bool hovered: false
+
     // ── Header row (avatar + sender + dots + copy) ─────────────────────────
-    // This row is always full-width of the bubble Item.
-    // For user messages it's visually right-aligned via LayoutMirroring.
     RowLayout {
         id: headerRow
         anchors.left:  parent.left
@@ -34,7 +29,6 @@ Item {
         anchors.topMargin: 8
         spacing: 8
 
-        // Mirror child order for user messages (right-align the whole row)
         LayoutMirroring.enabled: isUser
         LayoutMirroring.childrenInherit: false
 
@@ -97,17 +91,17 @@ Item {
         // Spacer pushes copy button to far end
         Item { Layout.fillWidth: true }
 
-        // Copy button — fades in on hover
+        // Copy button — visible on whole-bubble hover
         Rectangle {
             id: copyBtn
             width:  24; height: 24
             radius: root.themeObj.radiusSm
             visible: !root.isStreaming && root.content.length > 0
-            color: copyHoverArea.containsMouse ? root.themeObj.bgHover : "transparent"
+            color: copyBtnArea.containsMouse ? root.themeObj.bgHover : "transparent"
             Layout.alignment: Qt.AlignVCenter
 
+            opacity: root.hovered ? 1.0 : 0.0
             Behavior on opacity { NumberAnimation { duration: 150 } }
-            opacity: copyHoverArea.containsMouse ? 1.0 : 0.0
 
             Text {
                 anchors.centerIn: parent
@@ -116,12 +110,12 @@ Item {
                 font.pixelSize: 12
             }
 
-            ToolTip.visible: copyHoverArea.containsMouse
+            ToolTip.visible: copyBtnArea.containsMouse
             ToolTip.text:    "Copy message"
             ToolTip.delay:   500
 
             MouseArea {
-                id: copyHoverArea
+                id: copyBtnArea
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
@@ -135,32 +129,28 @@ Item {
     }
 
     // ── Bubble rectangle ─────────────────────────────────────────────────
-    // Width: capped at 70% of available space, minimum 120px.
+    // Width: capped at 70% of parent, minimum 180px so short messages don't
+    // look absurdly narrow. NO dependency on contentText.paintedWidth — that
+    // creates a binding loop (text width depends on assigned width, which
+    // depends on text width). Instead, bubble width is purely a function of
+    // the parent column width.
+    //
     // Aligned: user → right edge, AI/error/system → left edge.
     // Height: driven by contentText.paintedHeight + top/bottom padding.
-    //
-    // KEY: contentText is anchored left+right INSIDE the rectangle.
-    // This gives it a known width, so wrapMode produces correct paintedHeight.
-    // The rectangle's implicitHeight then correctly grows with the text.
     Rectangle {
         id: bubbleRect
 
-        // Placement: immediately below headerRow
         anchors.top:  headerRow.bottom
         anchors.topMargin: 6
 
-        // Width capped at 70% of the parent (which is the ~850px centered column)
-        width: Math.max(120, Math.min(parent.width * 0.70, contentText.paintedWidth + paddingH * 2 + accentBarWidth))
+        // Width: 70% max, 180px min — no paintedWidth in this formula
+        width: Math.max(180, parent.width * 0.70)
 
-        // Align right for user, left for others
         anchors.right: isUser  ? parent.right  : undefined
         anchors.left:  !isUser ? parent.left   : undefined
 
-        // Height: text height + top + bottom padding
-        // paddingV is the top AND bottom padding. Total = paddingV * 2.
         height: contentText.paintedHeight + paddingV * 2
 
-        // Internal padding constants
         readonly property int paddingH: isAssistant ? 20 : 14
         readonly property int paddingV: 14
         readonly property int accentBarWidth: isAssistant ? 3 : 0
@@ -182,7 +172,6 @@ Item {
             anchors.bottom:       parent.bottom
             anchors.topMargin:    8
             anchors.bottomMargin: 8
-            anchors.leftMargin:   0
             width:   3
             radius:  2
             color:   root.themeObj.assistant
@@ -195,7 +184,6 @@ Item {
             width: 2; height: 14; radius: 1
             color:   root.themeObj.accent
             visible: root.isStreaming
-            // Position just after the last character
             x: contentText.x + Math.min(contentText.contentWidth, contentText.width) + 2
             y: contentText.y + contentText.paintedHeight - 15
             SequentialAnimation on opacity {
@@ -207,8 +195,6 @@ Item {
         }
 
         // ── Text content ───────────────────────────────────────────────
-        // Anchored left+right so it has a known width for wrapping.
-        // No anchors.bottom — height is free to grow with content.
         TextEdit {
             id: contentText
 
@@ -224,7 +210,6 @@ Item {
             font.pixelSize:    15
             font.family:       "Segoe UI, system-ui, sans-serif"
 
-            // wrapMode requires a known width — provided by left+right anchors above
             wrapMode:          TextEdit.WrapAtWordBoundaryOrAnywhere
 
             readOnly:          true
@@ -232,13 +217,17 @@ Item {
             selectedTextColor: root.themeObj.bg
             selectionColor:    root.themeObj.accent
             textFormat:        TextEdit.PlainText
+        }
 
-            // Prevent TextEdit from overriding its own height
-            // (it must remain free to report paintedHeight correctly)
+        // Entire-bubble hover area (for copy button, etc.)
+        MouseArea {
+            anchors.fill: parent
+            hoverEnabled: true
+            onEntered: root.hovered = true
+            onExited:  root.hovered = false
         }
     }
 
-    // Hidden clipboard helper
     TextEdit {
         id: clipboardHelper
         visible: false

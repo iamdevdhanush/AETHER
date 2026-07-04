@@ -1,73 +1,64 @@
 """
-AETHER Browser Plugin
-Open URLs in the system default browser.
+AETHER Browser Tool
+Open URLs in the system default browser or perform web searches.
 """
 
 import logging
 import webbrowser
 import re
+import time
 from urllib.parse import quote_plus
 
-from models.plugin_base import PluginBase
+from models.tool_base import ToolBase, ToolObservation
 
 logger = logging.getLogger(__name__)
 
-URL_PATTERN = re.compile(
-    r'^(https?://|www\.)\S+', re.IGNORECASE
-)
+URL_PATTERN = re.compile(r'^(https?://|www\.)\S+', re.IGNORECASE)
 
 
-class BrowserPlugin(PluginBase):
-    """
-    Open URLs or search queries in the system default browser.
-    Automatically prepends https:// if missing.
-    Converts plain text to a Google search if not a URL.
-    """
+class BrowserPlugin(ToolBase):
 
-    def initialize(self):
-        logger.info("Browser plugin initialized")
+    def name(self) -> str:
+        return "browser"
 
-    async def execute(self, payload: dict) -> str:
-        query = payload.get("input", "").strip()
+    def description(self) -> str:
+        return "Open URLs or search the web in your default browser"
 
+    def parameters(self) -> dict:
+        return {
+            "type": "object",
+            "properties": {
+                "input": {"type": "string", "description": "URL or search query"},
+                "action": {"type": "string", "enum": ["open", "search"]},
+            },
+            "required": ["input"],
+        }
+
+    async def execute(self, params: dict) -> ToolObservation:
+        start = time.time()
+        query = params.get("input", "").strip()
         if not query:
-            return "No URL or search query provided."
+            return ToolObservation(stdout="", stderr="No URL or search query provided.", exit_code=1, success=False)
 
         url = self._resolve_url(query)
-
         try:
             opened = webbrowser.open(url, new=2, autoraise=True)
+            elapsed = (time.time() - start) * 1000
             if opened:
-                return f"Opened in browser: {url}"
-            else:
-                return f"Failed to open browser. URL: {url}"
+                return ToolObservation(stdout=f"Opened in browser: {url}", exit_code=0, success=True, execution_time_ms=elapsed)
+            return ToolObservation(stdout="", stderr=f"Failed to open browser. URL: {url}", exit_code=1, success=False, execution_time_ms=elapsed)
         except Exception as e:
-            logger.error(f"Browser launch error: {e}")
-            return f"Error opening browser: {e}"
+            elapsed = (time.time() - start) * 1000
+            return ToolObservation(stdout="", stderr=f"Error opening browser: {e}", exit_code=1, success=False, execution_time_ms=elapsed)
 
     def _resolve_url(self, query: str) -> str:
-        """Convert query to a URL."""
-        # Already a URL
         if URL_PATTERN.match(query):
             if not query.startswith("http"):
                 return "https://" + query
             return query
-
-        # Domain-like (contains a dot, no spaces)
         if "." in query and " " not in query:
             return "https://" + query
-
-        # Default: Google search
         return f"https://www.google.com/search?q={quote_plus(query)}"
 
     def shutdown(self):
-        logger.info("Browser plugin shut down")
-
-    def metadata(self) -> dict:
-        return {
-            "name": "browser",
-            "description": "Open URLs or search the web in your default browser",
-            "version": "1.0.0",
-            "icon": "🌐",
-            "category": "web",
-        }
+        logger.info("Browser tool shut down")

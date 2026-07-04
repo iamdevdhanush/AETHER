@@ -146,12 +146,11 @@ Rectangle {
                     }
                 }
 
-                // Event type badge — FIXED ET-1: use contentWidth not implicitWidth
-                // to avoid measuring before the Text is laid out
+                // Event type badge
                 Rectangle {
                     id: badge
                     anchors.left:      parent.left
-                    anchors.leftMargin: 32
+                    anchors.leftMargin: 34
                     anchors.top:       parent.top
                     anchors.topMargin: 7
                     height: 14

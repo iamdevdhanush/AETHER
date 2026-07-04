@@ -182,28 +182,15 @@ Rectangle {
                     : root.themeObj.accent
                 Behavior on color { ColorAnimation { duration: 120 } }
 
-                // Dim when nothing to send (not processing)
-                opacity: (inputField.text.trim().length > 0 || root.isProcessing) ? 1.0 : 0.35
+                opacity: inputField.text.trim().length > 0 ? 1.0 : 0.35
                 Behavior on opacity { NumberAnimation { duration: 150 } }
 
                 Text {
                     anchors.centerIn: parent
-                    text:  root.isProcessing ? "⏸" : "↑"
+                    text: "↑"
                     color: "white"
                     font.pixelSize: 16
                     font.weight:    Font.Bold
-                }
-
-                // Processing pulse — only runs when processing, only on opacity
-                // after the static Behavior above (behaviors are overridden by
-                // explicit animations running on the same property only when
-                // `running` is true)
-                SequentialAnimation on opacity {
-                    id: processingPulse
-                    loops:   Animation.Infinite
-                    running: root.isProcessing
-                    NumberAnimation { to: 0.5; duration: 700 }
-                    NumberAnimation { to: 1.0; duration: 700 }
                 }
 
                 MouseArea {
