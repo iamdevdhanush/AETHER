@@ -47,7 +47,7 @@ ollama pull llava          # Vision support
 
 ---
 
-## Step 3: Clone / Extract AETHER
+## Step 3: Clone / Extract AETHER 
 
 ```bash
 # If from ZIP:

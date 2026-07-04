@@ -110,9 +110,9 @@ class QMLBridge(QObject):
         # Connect system monitor updates
         self.system_monitor.stats_ready.connect(self._on_system_stats)
 
-        # Poll system stats every 2 seconds
+        # Poll system stats every 5 seconds (was 2s — reduces CPU/energy)
         self._stats_timer = QTimer(self)
-        self._stats_timer.setInterval(2000)
+        self._stats_timer.setInterval(5000)
         self._stats_timer.timeout.connect(self.system_monitor.update)
         self._stats_timer.start()
 
@@ -189,7 +189,10 @@ class QMLBridge(QObject):
     async def _stream_chat(self, text: str, conv_id: str,
                            memories: list[dict]):
         """Stream a conversational AI response through Ollama."""
-        history = await self.conversation_service.get_messages(conv_id)
+        # Use context window (last 20 messages) to avoid loading full history
+        history = await self.conversation_service.get_context_window(
+            conv_id, max_messages=20,
+        )
 
         full_response = ""
         chunk_count = 0

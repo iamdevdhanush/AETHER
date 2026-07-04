@@ -2,227 +2,245 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
+// MessageBubble receives an explicit `width` from the delegate.
+// It reports its required height via `implicitHeight`.
+// The sizing chain is strictly one-directional:
+//   parent sets width → TextEdit wraps within that width
+//   → paintedHeight becomes valid → rect grows → implicitHeight propagates up
 Item {
     id: root
 
-    // ── Height is driven entirely by the ColumnLayout child ──────────────
-    // Do NOT use a fixed height. implicitHeight flows up from ColumnLayout.
-    implicitWidth:  parent ? parent.width : 0
-    implicitHeight: bubbleColumn.implicitHeight + 20
+    // implicitHeight = header row + spacing + bubble rectangle + vertical padding
+    implicitHeight: headerRow.height + 6 + bubbleRect.height + 16
 
     required property var    themeObj
     required property string role
     required property string content
     required property bool   isStreaming
 
-    property bool isUser:      role === "user"
-    property bool isAssistant: role === "assistant"
-    property bool isError:     role === "error"
-    property bool isSystem:    role === "system"
+    readonly property bool isUser:      role === "user"
+    readonly property bool isAssistant: role === "assistant"
+    readonly property bool isError:     role === "error"
+    readonly property bool isSystem:    role === "system"
 
-    // ── Outer column anchored to the root Item ────────────────────────────
-    ColumnLayout {
-        id: bubbleColumn
+    // ── Header row (avatar + sender + dots + copy) ─────────────────────────
+    // This row is always full-width of the bubble Item.
+    // For user messages it's visually right-aligned via LayoutMirroring.
+    RowLayout {
+        id: headerRow
+        anchors.left:  parent.left
+        anchors.right: parent.right
+        anchors.top:   parent.top
+        anchors.topMargin: 8
+        spacing: 8
 
-        // Anchor all four sides so the layout knows its available width.
-        anchors.left:        parent.left
-        anchors.right:       parent.right
-        anchors.top:         parent.top
-        anchors.leftMargin:  isUser ?  80 : 20
-        anchors.rightMargin: isUser ?  20 : 80
-        anchors.topMargin:   10
+        // Mirror child order for user messages (right-align the whole row)
+        LayoutMirroring.enabled: isUser
+        LayoutMirroring.childrenInherit: false
 
-        spacing: 6
+        // Avatar circle (hidden for user)
+        Rectangle {
+            id: avatarCircle
+            width:   26
+            height:  26
+            radius:  13
+            visible: !isUser
+            color:   isError  ? root.themeObj.error    + "22"
+                   : isSystem ? root.themeObj.textMuted + "22"
+                   :            root.themeObj.assistant + "22"
 
-        // ── Row: avatar · sender name · streaming dots · spacer · copy ───
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 6
-
-            // Role avatar/icon (hidden for user)
-            Rectangle {
-                width:   24
-                height:  24
-                radius:  12
-                visible: !isUser
-                color:   isError  ? root.themeObj.error     + "40"
-                       : isSystem ? root.themeObj.textMuted + "40"
-                       :            root.themeObj.assistant + "30"
-
-                Text {
-                    anchors.centerIn: parent
-                    text:            isError ? "⚠" : isSystem ? "⚙" : "⬡"
-                    font.pixelSize:  isSystem ? 10 : 12
-                    color:           isError  ? root.themeObj.error
-                                   : isSystem ? root.themeObj.textMuted
-                                   :            root.themeObj.assistant
-                }
-            }
-
-            // Sender label
             Text {
-                text:              isUser ? "You" : isError ? "Error" : isSystem ? "System" : "AETHER"
-                color:             isUser ? root.themeObj.user
-                                 : isError  ? root.themeObj.error
-                                 : isSystem  ? root.themeObj.textMuted
-                                 :             root.themeObj.assistant
-                font.pixelSize:   11
-                font.weight:      Font.Medium
-                font.letterSpacing: 0.5
-                // Let text take its natural width; spacer pushes copy button right.
-                Layout.alignment: Qt.AlignVCenter
+                anchors.centerIn: parent
+                text:            isError ? "⚠" : isSystem ? "⚙" : "⬡"
+                font.pixelSize:  isSystem ? 11 : 13
+                color:           isError  ? root.themeObj.error
+                               : isSystem ? root.themeObj.textMuted
+                               :            root.themeObj.assistant
             }
+        }
 
-            // Streaming indicator dots
-            Row {
-                spacing: 3
-                visible: root.isStreaming
-                Layout.alignment: Qt.AlignVCenter
+        // Sender label
+        Text {
+            id: senderLabel
+            text:             isUser ? "You" : isError ? "Error" : isSystem ? "System" : "AETHER"
+            color:            isUser    ? root.themeObj.user
+                            : isError   ? root.themeObj.error
+                            : isSystem  ? root.themeObj.textMuted
+                            :             root.themeObj.assistant
+            font.pixelSize:  12
+            font.weight:     Font.SemiBold
+            Layout.alignment: Qt.AlignVCenter
+        }
 
-                Repeater {
-                    model: 3
-                    delegate: Rectangle {
-                        width:  4
-                        height: 4
-                        radius: 2
-                        color:  root.themeObj.accent
-                        SequentialAnimation on opacity {
-                            loops: Animation.Infinite
-                            NumberAnimation { to: 0.2; duration: 500; easing.type: Easing.InOutSine }
-                            NumberAnimation { to: 1.0; duration: 500; easing.type: Easing.InOutSine }
-                            PauseAnimation  { duration: index * 150 }
-                        }
+        // Streaming dots
+        Row {
+            spacing: 3
+            visible: root.isStreaming
+            Layout.alignment: Qt.AlignVCenter
+
+            Repeater {
+                model: 3
+                delegate: Rectangle {
+                    width:  4; height: 4; radius: 2
+                    color:  root.themeObj.accent
+                    SequentialAnimation on opacity {
+                        loops:   Animation.Infinite
+                        running: root.isStreaming
+                        PauseAnimation  { duration: index * 160 }
+                        NumberAnimation { to: 0.2; duration: 400; easing.type: Easing.InOutSine }
+                        NumberAnimation { to: 1.0; duration: 400; easing.type: Easing.InOutSine }
                     }
                 }
             }
-
-            // Flexible spacer
-            Item { Layout.fillWidth: true }
-
-            // Copy button (only for completed messages)
-            ToolButton {
-                implicitWidth:  24
-                implicitHeight: 24
-                visible: !root.isStreaming && root.content.length > 0
-                opacity: copyHover.containsMouse ? 1.0 : 0.4
-                Layout.alignment: Qt.AlignVCenter
-
-                onClicked: {
-                    let textArea = Qt.createQmlObject(
-                        'import QtQuick 2.15; TextEdit { visible: false }',
-                        root
-                    )
-                    textArea.text = root.content
-                    textArea.selectAll()
-                    textArea.copy()
-                    textArea.destroy()
-                }
-
-                ToolTip.visible: copyHover.containsMouse
-                ToolTip.text:    "Copy"
-
-                contentItem: Text {
-                    text:               "⎘"
-                    color:              root.themeObj.textMuted
-                    font.pixelSize:     12
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment:   Text.AlignVCenter
-                }
-
-                background: Rectangle { color: "transparent" }
-
-                MouseArea {
-                    id: copyHover
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    onClicked:    parent.clicked()
-                }
-            }
         }
 
-        // ── Bubble rectangle – height driven by TextEdit.paintedHeight ────
+        // Spacer pushes copy button to far end
+        Item { Layout.fillWidth: true }
+
+        // Copy button — fades in on hover
         Rectangle {
-            Layout.fillWidth: true
+            id: copyBtn
+            width:  24; height: 24
+            radius: root.themeObj.radiusSm
+            visible: !root.isStreaming && root.content.length > 0
+            color: copyHoverArea.containsMouse ? root.themeObj.bgHover : "transparent"
+            Layout.alignment: Qt.AlignVCenter
 
-            // KEY FIX: height = text painted height + top + bottom padding.
-            // Do NOT use anchors.fill on the child TextEdit — that creates a
-            // circular dependency and collapses the height to zero.
-            implicitHeight: contentText.paintedHeight + 24
+            Behavior on opacity { NumberAnimation { duration: 150 } }
+            opacity: copyHoverArea.containsMouse ? 1.0 : 0.0
 
-            color:  isUser  ? root.themeObj.user  + "18"
-                  : isError ? root.themeObj.error + "18"
-                  :           root.themeObj.bgCard
-            radius: root.themeObj.radius
-
-            border.width: 1
-            border.color: isUser  ? root.themeObj.user  + "40"
-                        : isError ? root.themeObj.error + "40"
-                        :           root.themeObj.border
-
-            // Left accent bar for assistant messages
-            Rectangle {
-                anchors.left:         parent.left
-                anchors.top:          parent.top
-                anchors.bottom:       parent.bottom
-                anchors.topMargin:    8
-                anchors.bottomMargin: 8
-                anchors.leftMargin:   -1
-                width:   3
-                radius:  2
-                color:   root.themeObj.assistant
-                visible: root.isAssistant
+            Text {
+                anchors.centerIn: parent
+                text: "⎘"
+                color: root.themeObj.textMuted
+                font.pixelSize: 12
             }
 
-            // Blinking cursor while streaming
-            Rectangle {
-                id: streamCursor
-                width:   2
-                height:  14
-                radius:  1
-                color:   root.themeObj.accent
-                visible: root.isStreaming
-                // Position at end of last text line
-                x: contentText.x + contentText.contentWidth + 2
-                y: contentText.y + contentText.paintedHeight - 16
-                SequentialAnimation on opacity {
-                    loops:   Animation.Infinite
-                    running: root.isStreaming
-                    NumberAnimation { to: 0; duration: 500 }
-                    NumberAnimation { to: 1; duration: 500 }
+            ToolTip.visible: copyHoverArea.containsMouse
+            ToolTip.text:    "Copy message"
+            ToolTip.delay:   500
+
+            MouseArea {
+                id: copyHoverArea
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    clipboardHelper.text = root.content
+                    clipboardHelper.selectAll()
+                    clipboardHelper.copy()
                 }
             }
+        }
+    }
 
-            TextEdit {
-                id: contentText
+    // ── Bubble rectangle ─────────────────────────────────────────────────
+    // Width: capped at 70% of available space, minimum 120px.
+    // Aligned: user → right edge, AI/error/system → left edge.
+    // Height: driven by contentText.paintedHeight + top/bottom padding.
+    //
+    // KEY: contentText is anchored left+right INSIDE the rectangle.
+    // This gives it a known width, so wrapMode produces correct paintedHeight.
+    // The rectangle's implicitHeight then correctly grows with the text.
+    Rectangle {
+        id: bubbleRect
 
-                // ── WIDTH: explicit, not anchors.fill ─────────────────────
-                // Anchoring left/right gives the TextEdit a known width so
-                // wrapMode can break lines. Using anchors.fill would make the
-                // Rectangle's implicitHeight depend on contentText's height
-                // which depends on the Rectangle — circular → height = 0.
-                anchors.left:       parent.left
-                anchors.right:      parent.right
-                anchors.top:        parent.top
-                anchors.leftMargin: root.isAssistant ? 16 : 12
-                anchors.rightMargin: 12
-                anchors.topMargin:   12
-                // No anchors.bottom — height is free to grow with content.
+        // Placement: immediately below headerRow
+        anchors.top:  headerRow.bottom
+        anchors.topMargin: 6
 
-                text:              root.content
-                color:             isError ? root.themeObj.error
-                                           : root.themeObj.textPrimary
-                font.pixelSize:    14
-                font.family:       "monospace"
+        // Width capped at 70% of the parent (which is the ~850px centered column)
+        width: Math.max(120, Math.min(parent.width * 0.70, contentText.paintedWidth + paddingH * 2 + accentBarWidth))
 
-                // WordWrap requires a known width (provided by anchors above).
-                wrapMode:          TextEdit.WrapAtWordBoundaryOrAnywhere
+        // Align right for user, left for others
+        anchors.right: isUser  ? parent.right  : undefined
+        anchors.left:  !isUser ? parent.left   : undefined
 
-                readOnly:          true
-                selectByMouse:     true
-                selectedTextColor: root.themeObj.bg
-                selectionColor:    root.themeObj.accent
-                textFormat:        TextEdit.PlainText
+        // Height: text height + top + bottom padding
+        // paddingV is the top AND bottom padding. Total = paddingV * 2.
+        height: contentText.paintedHeight + paddingV * 2
+
+        // Internal padding constants
+        readonly property int paddingH: isAssistant ? 20 : 14
+        readonly property int paddingV: 14
+        readonly property int accentBarWidth: isAssistant ? 3 : 0
+
+        color:  isUser  ? root.themeObj.user  + "1A"
+              : isError ? root.themeObj.error + "1A"
+              :           root.themeObj.bgCard
+        radius: root.themeObj.radiusLg
+
+        border.width: 1
+        border.color: isUser  ? root.themeObj.user  + "40"
+                    : isError ? root.themeObj.error + "40"
+                    :           root.themeObj.border
+
+        // Left accent bar for assistant
+        Rectangle {
+            anchors.left:         parent.left
+            anchors.top:          parent.top
+            anchors.bottom:       parent.bottom
+            anchors.topMargin:    8
+            anchors.bottomMargin: 8
+            anchors.leftMargin:   0
+            width:   3
+            radius:  2
+            color:   root.themeObj.assistant
+            visible: root.isAssistant
+        }
+
+        // Blinking cursor while streaming
+        Rectangle {
+            id: streamCursor
+            width: 2; height: 14; radius: 1
+            color:   root.themeObj.accent
+            visible: root.isStreaming
+            // Position just after the last character
+            x: contentText.x + Math.min(contentText.contentWidth, contentText.width) + 2
+            y: contentText.y + contentText.paintedHeight - 15
+            SequentialAnimation on opacity {
+                loops:   Animation.Infinite
+                running: root.isStreaming
+                NumberAnimation { to: 0.0; duration: 500 }
+                NumberAnimation { to: 1.0; duration: 500 }
             }
         }
+
+        // ── Text content ───────────────────────────────────────────────
+        // Anchored left+right so it has a known width for wrapping.
+        // No anchors.bottom — height is free to grow with content.
+        TextEdit {
+            id: contentText
+
+            anchors.left:        parent.left
+            anchors.right:       parent.right
+            anchors.top:         parent.top
+            anchors.leftMargin:  bubbleRect.paddingH + bubbleRect.accentBarWidth
+            anchors.rightMargin: bubbleRect.paddingH
+            anchors.topMargin:   bubbleRect.paddingV
+
+            text:              root.content
+            color:             isError ? root.themeObj.error : root.themeObj.textPrimary
+            font.pixelSize:    15
+            font.family:       "Segoe UI, system-ui, sans-serif"
+
+            // wrapMode requires a known width — provided by left+right anchors above
+            wrapMode:          TextEdit.WrapAtWordBoundaryOrAnywhere
+
+            readOnly:          true
+            selectByMouse:     true
+            selectedTextColor: root.themeObj.bg
+            selectionColor:    root.themeObj.accent
+            textFormat:        TextEdit.PlainText
+
+            // Prevent TextEdit from overriding its own height
+            // (it must remain free to report paintedHeight correctly)
+        }
+    }
+
+    // Hidden clipboard helper
+    TextEdit {
+        id: clipboardHelper
+        visible: false
     }
 }

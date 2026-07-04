@@ -107,6 +107,7 @@ Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
+            reuseItems: true
             model: ListModel { id: memoryModel }
             spacing: 1
 

@@ -19,7 +19,6 @@ Rectangle {
     ]
 
     function appendMessage(role, content) {
-        // Only add user messages here; AI messages are built by streaming
         if (role === "user") {
             messageModel.append({
                 "role": role,
@@ -32,7 +31,6 @@ Rectangle {
 
     function appendStreamChunk(chunk) {
         if (!isStreaming) {
-            // Start a new AI message
             isStreaming = true
             streamBuffer = ""
             messageModel.append({
@@ -91,15 +89,21 @@ Rectangle {
         })
     }
 
-    // ── Message list ─────────────────────────────────────────────────────
+    // ── Message list ───────────────────────────────────────────────────────
     ListView {
         id: messageList
         anchors.fill: parent
-        anchors.bottomMargin: 0
         clip: true
         model: ListModel { id: messageModel }
-        spacing: 0
+        spacing: 8
+
+        // FIXED CP-4: reuseItems was causing stale anchor bindings on recycled
+        // delegates when role changed. Disabled to ensure fresh bindings.
+        reuseItems: false
+
         verticalLayoutDirection: ListView.TopToBottom
+        flickDeceleration: 3500
+        maximumFlickVelocity: 3500
 
         ScrollBar.vertical: ScrollBar {
             policy: ScrollBar.AsNeeded
@@ -107,25 +111,34 @@ Rectangle {
                 color: root.themeObj.borderBright
                 radius: 2
                 implicitWidth: 4
+                opacity: 0.5
             }
             background: Rectangle { color: "transparent" }
         }
 
-        // Top spacer
-        header: Item { height: 16; width: parent.width }
+        header: Item { height: 24; width: parent ? parent.width : 0 }
+        footer: Item { height: 24; width: parent ? parent.width : 0 }
 
         delegate: Item {
-            // KEY FIX: height must be bound to the bubble's implicitHeight.
-            // Without this the Item collapses to 0 and every bubble
-            // is painted on top of the previous one at y=0.
-            width:  messageList.width
+            id: delegateItem
+
+            // Width = full list width (includes scrollbar region)
+            width: messageList.width
+
+            // FIXED CP-1/CP-2: Height is driven by the bubble's implicitHeight.
+            // The bubble receives an explicit width (the capped column width),
+            // computes its own implicitHeight correctly, and we bind to that.
             height: bubble.implicitHeight
 
             MessageBubble {
                 id: bubble
-                // Fill the delegate Item so the bubble knows its width.
-                anchors.left:  parent.left
-                anchors.right: parent.right
+
+                // Give the bubble a known width — the centered column.
+                // Max 850px, 24px margin each side = 48px total.
+                // anchors.horizontalCenter ensures equal left/right margins.
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: Math.min(850, Math.max(300, delegateItem.width - 48))
+
                 role:        model.role
                 content:     model.content
                 isStreaming: model.isStreaming
@@ -133,30 +146,50 @@ Rectangle {
             }
         }
 
-        // Bottom spacer
-        footer: Item { height: 16; width: parent.width }
-
-        // Empty state / welcome screen
+        // ── Welcome / empty state ────────────────────────────────────────
+        // FIXED CP-3: Item now has an explicit height bound to the ColumnLayout's
+        // implicitHeight. ColumnLayout no longer uses anchors.centerIn (which
+        // requires the parent to have a size first).
         Item {
+            id: emptyState
             anchors.centerIn: parent
             visible: messageModel.count === 0
-            width: parent.width
+            width:  Math.min(520, messageList.width - 48)
+            height: emptyCol.implicitHeight
 
             ColumnLayout {
-                anchors.centerIn: parent
+                id: emptyCol
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: parent.width
                 spacing: 16
 
-                Text {
-                    text: "⬡"
-                    font.pixelSize: 56
-                    color: root.themeObj.accentDim
+                // Icon with glow ring
+                Item {
                     Layout.alignment: Qt.AlignHCenter
+                    Layout.preferredWidth: 80
+                    Layout.preferredHeight: 80
+
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: 72; height: 72
+                        radius: 36
+                        color: root.themeObj.accent + "14"
+                        border.color: root.themeObj.accent + "30"
+                        border.width: 1
+                    }
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "⬡"
+                        font.pixelSize: 36
+                        color: root.themeObj.accent
+                    }
                 }
 
                 Text {
                     text: "AETHER"
                     font.pixelSize: 28
-                    font.letterSpacing: 8
+                    font.letterSpacing: 10
                     font.weight: Font.Bold
                     color: root.themeObj.textPrimary
                     Layout.alignment: Qt.AlignHCenter
@@ -170,26 +203,24 @@ Rectangle {
                 }
 
                 Rectangle {
-                    Layout.preferredWidth: 300
-                    height: 1
+                    Layout.preferredWidth: 200
+                    Layout.preferredHeight: 1
                     color: root.themeObj.border
                     Layout.alignment: Qt.AlignHCenter
                 }
 
-                // Suggestion chips
+                // Suggestion chips — fixed width so Flow can reflow
                 Flow {
                     Layout.alignment: Qt.AlignHCenter
-                    Layout.preferredWidth: 500
+                    Layout.preferredWidth: Math.min(500, messageList.width - 64)
                     spacing: 8
 
                     Repeater {
                         model: root.suggestions
-                        delegate: Item {
-                            SuggestionChip {
-                                text: modelData !== undefined ? modelData : model
-                                themeObj: root.themeObj
-                                onClicked: bridge.sendMessage(text)
-                            }
+                        delegate: SuggestionChip {
+                            text: modelData !== undefined ? modelData : ""
+                            themeObj: root.themeObj
+                            onClicked: bridge.sendMessage(text)
                         }
                     }
                 }

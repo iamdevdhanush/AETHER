@@ -28,52 +28,74 @@ Rectangle {
         anchors.fill: parent
         spacing: 0
 
-        // Header
+        // ── Header ─────────────────────────────────────────────────────
         RowLayout {
             Layout.fillWidth: true
             Layout.preferredHeight: 48
-            Layout.leftMargin: 12
-            Layout.rightMargin: 8
-            spacing: 6
+            Layout.leftMargin: 16
+            Layout.rightMargin: 10
+            spacing: 8
 
             Text {
                 text: "⚡"
-                font.pixelSize: 14
+                font.pixelSize: 13
+                color: root.themeObj.warning
             }
+
             Text {
                 text: "Agent Timeline"
                 color: root.themeObj.textSec
-                font.pixelSize: 11
-                font.letterSpacing: 1
+                font.pixelSize: 12
+                font.letterSpacing: 0.5
                 font.weight: Font.Medium
                 Layout.fillWidth: true
             }
+
             ToolButton {
-                implicitWidth: 28
+                implicitWidth:  28
                 implicitHeight: 28
+                visible: timelineModel.count > 0
                 onClicked: root.clearEvents()
                 ToolTip.visible: hovered
                 ToolTip.text: "Clear"
+                ToolTip.delay: 500
+
                 contentItem: Text {
                     text: "✕"
-                    color: root.themeObj.textMuted
+                    color: clearHover.containsMouse
+                        ? root.themeObj.textSec
+                        : root.themeObj.textMuted
                     font.pixelSize: 11
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
+                    Behavior on color { ColorAnimation { duration: 120 } }
                 }
+
                 background: Rectangle {
-                    color: parent.hovered ? root.themeObj.bgHover : "transparent"
+                    color: clearHover.containsMouse
+                        ? root.themeObj.bgHover
+                        : "transparent"
                     radius: root.themeObj.radiusSm
+                    Behavior on color { ColorAnimation { duration: 120 } }
+                }
+
+                MouseArea {
+                    id: clearHover
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onClicked: parent.clicked()
                 }
             }
         }
 
+        // Header separator
         Rectangle {
             Layout.fillWidth: true
             height: 1
             color: root.themeObj.border
         }
 
+        // ── Event list ────────────────────────────────────────────────
         ListView {
             id: timelineList
             Layout.fillWidth: true
@@ -81,66 +103,68 @@ Rectangle {
             clip: true
             model: ListModel { id: timelineModel }
             spacing: 0
+            reuseItems: true
+            topMargin: 8
 
             ScrollBar.vertical: ScrollBar {
                 policy: ScrollBar.AsNeeded
                 contentItem: Rectangle {
                     color: root.themeObj.borderBright
                     radius: 2
-                    implicitWidth: 4
+                    implicitWidth: 3
+                    opacity: 0.6
                 }
                 background: Rectangle { color: "transparent" }
             }
 
-            header: Item { height: 8 }
-
             delegate: Item {
                 width: timelineList.width
-                height: 52
+                height: 50
 
-                // Vertical line
+                // Vertical timeline line
                 Rectangle {
-                    anchors.left: parent.left
-                    anchors.leftMargin: 22
-                    anchors.top: parent.top
-                    anchors.bottom: parent.bottom
+                    anchors.left:     parent.left
+                    anchors.leftMargin: 20
+                    anchors.top:      parent.top
+                    anchors.bottom:   parent.bottom
                     width: 1
                     color: root.themeObj.border
                 }
 
-                // Dot
+                // Event dot
                 Rectangle {
-                    width: 8
-                    height: 8
+                    width:  8; height: 8
                     radius: 4
                     anchors.left: parent.left
-                    anchors.leftMargin: 19
+                    anchors.leftMargin: 17
                     anchors.verticalCenter: parent.verticalCenter
                     color: _dotColor(model.eventType)
 
                     SequentialAnimation on scale {
                         loops: 1
-                        NumberAnimation { from: 1.5; to: 1.0; duration: 400; easing.type: Easing.OutBounce }
+                        NumberAnimation { from: 1.6; to: 1.0; duration: 350; easing.type: Easing.OutBack }
                     }
                 }
 
-                // Label for the step type
+                // Event type badge — FIXED ET-1: use contentWidth not implicitWidth
+                // to avoid measuring before the Text is laid out
                 Rectangle {
-                    anchors.left: parent.left
+                    id: badge
+                    anchors.left:      parent.left
                     anchors.leftMargin: 32
-                    anchors.top: parent.top
-                    anchors.topMargin: 6
-                    height: 16
+                    anchors.top:       parent.top
+                    anchors.topMargin: 7
+                    height: 14
+                    // Use badgeLabel.contentWidth which is always valid after paint
+                    width:  Math.max(20, badgeLabel.contentWidth + 10)
                     radius: 3
-                    color: _dotColor(model.eventType)
-                    opacity: 0.15
+                    color:  _dotColor(model.eventType) + "20"
                     visible: _stepLabel(model.eventType) !== ""
 
                     Text {
-                        anchors.left: parent.left
-                        anchors.leftMargin: 5
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: _stepLabel(model.eventType)
+                        id: badgeLabel
+                        anchors.centerIn: parent
+                        text:  _stepLabel(model.eventType)
                         color: _dotColor(model.eventType)
                         font.pixelSize: 8
                         font.weight: Font.Bold
@@ -149,12 +173,13 @@ Rectangle {
                 }
 
                 ColumnLayout {
-                    anchors.left: parent.left
-                    anchors.leftMargin: 36
-                    anchors.right: parent.right
-                    anchors.rightMargin: 8
-                    anchors.verticalCenter: parent.verticalCenter
-                    spacing: 2
+                    anchors.left:    parent.left
+                    anchors.leftMargin: 34
+                    anchors.right:   parent.right
+                    anchors.rightMargin: 10
+                    anchors.bottom:  parent.bottom
+                    anchors.bottomMargin: 8
+                    spacing: 1
 
                     Text {
                         text: model.description
@@ -162,40 +187,42 @@ Rectangle {
                         font.pixelSize: 11
                         elide: Text.ElideRight
                         Layout.fillWidth: true
-                        Layout.topMargin: 12
                     }
 
                     Text {
                         text: _formatTime(model.timestamp)
                         color: root.themeObj.textMuted
-                        font.pixelSize: 9
+                        font.pixelSize: 10
                     }
                 }
             }
 
-            // Empty state
+            // ── Empty state — FIXED ET-2: explicit height ─────────────────
             Item {
                 anchors.centerIn: parent
                 visible: timelineModel.count === 0
+                width:  parent.width
+                // Must have explicit height so anchors.centerIn works correctly
+                height: emptyStateCol.implicitHeight
+
                 ColumnLayout {
-                    anchors.centerIn: parent
-                    spacing: 6
+                    id: emptyStateCol
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: 8
+
                     Text {
                         text: "⚡"
-                        font.pixelSize: 24
+                        font.pixelSize: 22
                         color: root.themeObj.textMuted
+                        opacity: 0.5
                         Layout.alignment: Qt.AlignHCenter
                     }
+
                     Text {
-                        text: "Agent timeline"
+                        text: "No activity yet"
                         color: root.themeObj.textMuted
-                        font.pixelSize: 11
-                        Layout.alignment: Qt.AlignHCenter
-                    }
-                    Text {
-                        text: "Action flow appears here"
-                        color: root.themeObj.textMuted
-                        font.pixelSize: 9
+                        font.pixelSize: 12
+                        opacity: 0.5
                         Layout.alignment: Qt.AlignHCenter
                     }
                 }
