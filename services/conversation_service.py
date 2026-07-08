@@ -190,15 +190,21 @@ class ConversationService:
         Generate a concise title from the user's first message.
 
         Rules:
-          - Strip polite prefixes ("Help me", "Can you", etc.)
-          - If the result is a short question, extract the core noun
+          - Strip polite prefixes ("Help me", "Can you", etc.) iteratively
+          - Expand contractions (What's -> What is) for noun extraction
+          - For questions, extract the core noun/subject
+          - Capitalize first letter
           - Max 32 characters, truncate with "..." if longer
         """
         title = first_message.strip()
         if not title:
             return "New Conversation"
 
-        title = STRIP_PREFIXES.sub("", title).strip()
+        # Iteratively strip polite prefixes
+        prev = None
+        while prev != title:
+            prev = title
+            title = STRIP_PREFIXES.sub("", title).strip()
         title = title.replace("\n", " ").replace("\r", "")
 
         while "  " in title:
@@ -208,42 +214,38 @@ class ConversationService:
         if not title:
             return "New Conversation"
 
-        title = title[0].upper() + title[1:] if title else title
+        # Check if the ORIGINAL stripped form was a question
+        # We preserve the ? through the prefix stripping but it got removed
+        # above. Let's re-check the original cleaned title.
+        had_question = "?" in first_message
 
-        if title.lower().startswith("what") or title.lower().startswith("how"):
-            expanded = title.lower().replace("what's", "what is").replace("how's", "how is")
-            if expanded != title.lower():
-                words = expanded.split()
-            else:
-                words = title.split()
+        # Try to extract core noun from questions
+        words = title.split()
+        max_q_words = ("what", "how", "why", "when", "where", "who")
+        skip_words = ("is", "are", "was", "were", "does", "do", "can",
+                      "would", "could", "should", "will", "shall",
+                      "the", "a", "an", "my", "your", "this", "that")
 
-            if len(words) > 3 and title.endswith("?"):
+        if had_question and len(words) >= 2:
+            first_word = words[0].lower().replace("'s", "").replace("'re", "").replace("'ve", "")
+            if first_word in max_q_words:
+                expanded_text = title.lower().replace("what's", "what is").replace("how's", "how is")
+                words = expanded_text.split()
+
                 noun_idx = 1
-                for skip_word in ("is", "are", "was", "were", "does", "do", "can",
-                                   "would", "could", "should", "will", "shall",
-                                   "the", "a", "an"):
-                    if noun_idx < len(words) and words[noun_idx].lower() == skip_word:
-                        noun_idx += 1
-                if noun_idx < len(words):
-                    extracted = " ".join(words[noun_idx:]).rstrip("?").strip()
-                    if len(extracted) < len(title) * 0.7:
-                        title = extracted[0].upper() + extracted[1:] if extracted else title
+                while noun_idx < len(words) and words[noun_idx] in skip_words:
+                    noun_idx += 1
 
-        if title.endswith("?"):
-            title = title.rstrip("?").strip()
-            words = title.split()
-            if len(words) >= 3:
-                only_question_word = words[0].lower() in (
-                    "what", "how", "why", "when", "where", "who")
-                if only_question_word:
-                    noun_idx = 1
-                    for skip_word in ("is", "are", "was", "were", "does", "do",
-                                       "the", "a", "an"):
-                        if noun_idx < len(words) and words[noun_idx].lower() == skip_word:
-                            noun_idx += 1
-                    if noun_idx < len(words):
-                        title = " ".join(words[noun_idx:])
-                        title = title[0].upper() + title[1:] if title else title
+                if noun_idx < len(words):
+                    extracted = " ".join(words[noun_idx:]).strip()
+                    if len(extracted) < len(title) * 0.8:
+                        title = extracted
+
+        # Final cleanup
+        title = title.strip(" '\"`.,!?;:")
+        if not title:
+            return "New Conversation"
+        title = title[0].upper() + title[1:] if title else title
 
         if len(title) > MAX_TITLE_LENGTH:
             title = title[:MAX_TITLE_LENGTH - 3].rstrip() + "..."

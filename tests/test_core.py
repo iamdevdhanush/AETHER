@@ -10,6 +10,8 @@ import tempfile
 from pathlib import Path
 import pytest
 
+from models.tool_base import ToolObservation
+
 # Ensure project root is in path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -147,26 +149,23 @@ class TestTerminalPlugin:
         self.plugin.shutdown()
 
     def test_metadata(self):
-        meta = self.plugin.metadata()
-        assert meta["name"] == "terminal"
-        assert "description" in meta
-        assert "version" in meta
+        assert self.plugin.name() == "terminal"
+        assert self.plugin.description()
 
     def test_echo_command(self):
         result = asyncio.run(self.plugin.execute({"input": "echo hello"}))
-        assert "hello" in result.lower()
+        assert "hello" in result.stdout.lower()
 
     def test_empty_command(self):
         result = asyncio.run(self.plugin.execute({"input": ""}))
-        assert "No command" in result
+        assert "No command" in result.stderr
 
     def test_invalid_command(self):
         result = asyncio.run(self.plugin.execute(
             {"input": "this_command_does_not_exist_xyz"}
         ))
-        # Should not raise, should return error message
-        assert isinstance(result, str)
-        assert len(result) > 0
+        assert isinstance(result, ToolObservation)
+        assert not result.success
 
 
 class TestFilesystemPlugin:
@@ -179,8 +178,8 @@ class TestFilesystemPlugin:
         self.plugin.shutdown()
 
     def test_metadata(self):
-        meta = self.plugin.metadata()
-        assert meta["name"] == "filesystem"
+        assert self.plugin.name() == "filesystem"
+        assert self.plugin.description()
 
     def test_list_home(self):
         import os
@@ -188,7 +187,7 @@ class TestFilesystemPlugin:
             "action": "list",
             "path": str(Path.home()),
         }))
-        assert "Directory:" in result
+        assert "Directory:" in result.stdout
 
     def test_read_write_file(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -199,13 +198,13 @@ class TestFilesystemPlugin:
                 "path": str(test_file),
                 "content": "Hello AETHER",
             }))
-            assert "Written" in write_result
+            assert "Written" in write_result.stdout
             # Read back
             read_result = asyncio.run(self.plugin.execute({
                 "action": "read",
                 "path": str(test_file),
             }))
-            assert "Hello AETHER" in read_result
+            assert "Hello AETHER" in read_result.stdout
 
     def test_stat_file(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -215,7 +214,7 @@ class TestFilesystemPlugin:
                 "action": "stat",
                 "path": str(test_file),
             }))
-            assert "File:" in result
+            assert "File:" in result.stdout
 
 
 class TestBrowserPlugin:
@@ -228,8 +227,8 @@ class TestBrowserPlugin:
         self.plugin.shutdown()
 
     def test_metadata(self):
-        meta = self.plugin.metadata()
-        assert meta["name"] == "browser"
+        assert self.plugin.name() == "browser"
+        assert self.plugin.description()
 
     def test_url_resolution_https(self):
         url = self.plugin._resolve_url("https://example.com")
@@ -255,36 +254,36 @@ class TestExecutorPlugin:
         self.plugin.shutdown()
 
     def test_metadata(self):
-        meta = self.plugin.metadata()
-        assert meta["name"] == "executor"
+        assert self.plugin.name() == "executor"
+        assert self.plugin.description()
 
     def test_simple_expression(self):
         result = asyncio.run(self.plugin.execute({"input": "2 + 2"}))
-        assert "4" in result
+        assert "4" in result.stdout
 
     def test_print_statement(self):
         result = asyncio.run(self.plugin.execute({"input": "print('hello world')"}))
-        assert "hello world" in result
+        assert "hello world" in result.stdout
 
     def test_multiline_code(self):
         code = "x = 10\ny = 20\nprint(x + y)"
         result = asyncio.run(self.plugin.execute({"input": code}))
-        assert "30" in result
+        assert "30" in result.stdout
 
     def test_syntax_error_handled(self):
         result = asyncio.run(self.plugin.execute({"input": "def broken(:\n    pass"}))
-        assert isinstance(result, str)
-        assert len(result) > 0
+        assert isinstance(result, ToolObservation)
+        assert not result.success
 
     def test_empty_input(self):
         result = asyncio.run(self.plugin.execute({"input": ""}))
-        assert "No code" in result
+        assert "No code" in result.stderr
 
     def test_markdown_fences_stripped(self):
         result = asyncio.run(self.plugin.execute({
             "input": "```python\nprint('fenced')\n```"
         }))
-        assert "fenced" in result
+        assert "fenced" in result.stdout
 
 
 class TestSysmonPlugin:
@@ -297,33 +296,34 @@ class TestSysmonPlugin:
         self.plugin.shutdown()
 
     def test_metadata(self):
-        meta = self.plugin.metadata()
-        assert meta["name"] == "sysmon"
+        assert self.plugin.name() == "sysmon"
+        assert self.plugin.description()
 
     def test_full_report(self):
         result = asyncio.run(self.plugin.execute({"input": "all"}))
-        assert "CPU" in result
+        assert "CPU" in result.stdout
 
     def test_cpu_report(self):
         result = asyncio.run(self.plugin.execute({"input": "cpu"}))
-        assert "CPU" in result
-        assert "%" in result
+        assert "CPU" in result.stdout
+        assert "%" in result.stdout
 
     def test_memory_report(self):
         result = asyncio.run(self.plugin.execute({"input": "memory"}))
-        assert "RAM" in result
-        assert "GB" in result
+        assert "RAM" in result.stdout
+        assert "GB" in result.stdout
 
     def test_disk_report(self):
         result = asyncio.run(self.plugin.execute({"input": "disk"}))
-        assert "Disk" in result
+        assert "Disk" in result.stdout
 
 
 class TestPluginManager:
     def setup_method(self):
+        from core.tool_registry import ToolRegistry
         from services.plugin_manager import PluginManager
         plugins_dir = Path(__file__).parent.parent / "plugins"
-        self.mgr = PluginManager(plugins_dir)
+        self.mgr = PluginManager(plugins_dir, ToolRegistry())
         self.mgr.discover_and_load()
 
     def teardown_method(self):

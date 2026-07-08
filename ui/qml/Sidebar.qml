@@ -777,7 +777,7 @@ Rectangle {
                                         onClicked: {
                                             contextPopup.close()
                                             _handleMenuAction(item.action,
-                                                model.id, model.title)
+                                                root.menuTargetId, root.menuTargetTitle)
                                         }
                                     }
                                 }
@@ -1061,12 +1061,13 @@ Rectangle {
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
-                                bridge.deleteConversation(deleteTargetId)
-                                deleteDialogOpen = false
-                                deleteTargetId = ""
-                                if (deleteTargetId === root.activeConversationId) {
+                                var targetId = deleteTargetId
+                                if (targetId === root.activeConversationId) {
                                     root.activeConversationId = ""
                                 }
+                                bridge.deleteConversation(targetId)
+                                deleteDialogOpen = false
+                                deleteTargetId = ""
                             }
                         }
                     }

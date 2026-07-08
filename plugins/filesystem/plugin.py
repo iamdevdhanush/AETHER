@@ -62,6 +62,8 @@ class FilesystemPlugin(ToolBase):
             elif action == "search" or (not action and params.get("input", "").startswith("search")):
                 query = params.get("query", "")
                 result = await self._search(path, query)
+            elif action == "stat" or (not action and params.get("input", "").startswith("stat")):
+                result = await self._stat(path)
             else:
                 result = await self._parse_and_execute(params.get("input", ""))
             elapsed = (time.time() - start) * 1000

@@ -145,10 +145,30 @@ class MemoryService:
                 return match.group(1)
         return None
 
+    def _extract_name(self, text: str) -> str | None:
+        patterns = [
+            r"(?:my\s+(?:name\s+)?is|I'?m\s+called|call\s+me)\s+([A-Z]\w+)",
+            r"(?:name'?s|name\s+is)\s+([A-Z]\w+)",
+        ]
+        for pattern in patterns:
+            m = re.search(pattern, text, re.I)
+            if m:
+                return m.group(1)
+        return None
+
     async def extract_and_store(self, user_message: str,
                                  assistant_response: str):
         self.add_to_short_term("user", user_message)
         self.add_to_short_term("assistant", assistant_response)
+        name = self._extract_name(user_message)
+        if name:
+            existing = self.db.search_memories(f"User's name is {name}", limit=2)
+            if not any(name.lower() in m["content"].lower() for m in existing):
+                self.db.add_memory(
+                    content=f"User's name is {name}",
+                    source="conversation", importance=0.9,
+                    tags=["user_info", "name"],
+                )
 
     async def summarize_and_store(self, conversation_id: str,
                                    messages: list[dict]) -> None:

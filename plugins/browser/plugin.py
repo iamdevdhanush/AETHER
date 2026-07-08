@@ -34,6 +34,9 @@ class BrowserPlugin(ToolBase):
             "required": ["input"],
         }
 
+    def initialize(self):
+        pass
+
     async def execute(self, params: dict) -> ToolObservation:
         start = time.time()
         query = params.get("input", "").strip()
