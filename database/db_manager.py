@@ -204,6 +204,7 @@ class DatabaseManager:
             )
         return {"id": conv_id, "title": title, "model": model,
                 "created_at": now, "updated_at": now,
+                "pinned": 0, "favorite": 0, "custom_title": 0,
                 "last_message": "", "message_count": 0}
 
     def list_conversations(self) -> list[dict]:

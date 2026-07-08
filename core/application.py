@@ -79,6 +79,7 @@ class AetherApplication(QObject):
         self.conversation_service = services["conversation_service"]
         self.memory_service = services["memory_service"]
         self.system_monitor = services["system_monitor"]
+        self.system_monitor.moveToThread(self.app.thread())
         self.tool_registry = services["tool_registry"]
         self.intent_router = services["intent_router"]
         self.planner = services["planner"]

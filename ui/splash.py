@@ -6,9 +6,9 @@ Shown during initialization with animated progress.
 import logging
 from pathlib import Path
 
-from PySide6.QtWidgets import QSplashScreen, QWidget, QVBoxLayout, QLabel, QProgressBar
-from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, Property, QObject
-from PySide6.QtGui import QPixmap, QPainter, QColor, QFont, QLinearGradient, QPen, QBrush
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QProgressBar
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QPainter, QColor, QLinearGradient, QPen, QBrush
 
 logger = logging.getLogger(__name__)
 

@@ -23,7 +23,6 @@ Tool Gate:
 """
 
 import logging
-import asyncio
 from typing import Optional, AsyncIterator
 
 from core.models import Intent, Plan, PlanStep, ReasoningState

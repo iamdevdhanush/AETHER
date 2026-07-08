@@ -9,7 +9,6 @@ Routes through the new Agent Runtime:
 
 import logging
 import asyncio
-import threading
 import json
 import time
 from pathlib import Path
@@ -152,9 +151,6 @@ class QMLBridge(QObject):
             role="user", content=text,
         )
 
-        if self.memory_service:
-            await self.memory_service.extract_and_store(text, "")
-
         if self.agent_runtime:
             try:
                 result = await self.agent_runtime.process(text)
@@ -170,6 +166,8 @@ class QMLBridge(QObject):
                     conversation_id=self._current_conversation_id,
                     role="assistant", content=result,
                 )
+                if self.memory_service:
+                    await self.memory_service.extract_and_store(text, result)
                 return
 
         await self._stream_chat(text)
@@ -266,10 +264,11 @@ class QMLBridge(QObject):
         worker = AsyncWorker(
             self.conversation_service.rename_conversation(conversation_id, new_title)
         )
-        worker.result.connect(lambda ok: (
-            self.conversationRenamed.emit(conversation_id, new_title) if ok else None,
-            self.loadConversations() if ok else None,
-        ))
+        def _on_rename_result(ok: bool):
+            if ok:
+                self.conversationRenamed.emit(conversation_id, new_title)
+                self.loadConversations()
+        worker.result.connect(_on_rename_result)
         worker.finished.connect(lambda: self._cleanup_worker(worker))
         self._active_workers.append(worker)
         worker.start()
@@ -279,10 +278,11 @@ class QMLBridge(QObject):
         worker = AsyncWorker(
             self.conversation_service.duplicate_conversation(conversation_id)
         )
-        worker.result.connect(lambda new_conv: (
-            self.conversationDuplicated.emit(new_conv["id"], new_conv["title"]),
-            self.loadConversations(),
-        ) if new_conv else None)
+        def _on_duplicate_result(new_conv):
+            if new_conv:
+                self.conversationDuplicated.emit(new_conv["id"], new_conv["title"])
+                self.loadConversations()
+        worker.result.connect(_on_duplicate_result)
         worker.finished.connect(lambda: self._cleanup_worker(worker))
         self._active_workers.append(worker)
         worker.start()

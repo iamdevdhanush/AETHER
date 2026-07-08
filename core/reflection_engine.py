@@ -9,8 +9,6 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-HIGH_RISK_TOOLS = {"system": ["shutdown", "restart", "reboot"]}
-
 
 class ReflectionEngine:
 

@@ -49,19 +49,27 @@ class PermissionManager:
             logger.warning("Auto-approved high-risk action: %s %s", tool_name, params)
             return True
 
-        logger.warning("High-risk action requires approval: %s %s — %s", tool_name, params, reason)
+        import uuid
+        request_id = str(uuid.uuid4())
+        self._pending_approvals[request_id] = {
+            "tool_name": tool_name,
+            "params": params,
+            "reason": reason,
+        }
+        logger.warning("High-risk action requires approval (id=%s): %s %s — %s",
+                       request_id, tool_name, params, reason)
         return False
 
     def approve(self, request_id: str) -> bool:
         req = self._pending_approvals.pop(request_id, None)
         if req:
-            logger.info("Approved: %s", request_id)
+            logger.info("Approved: %s — %s", request_id, req["tool_name"])
             return True
         return False
 
     def deny(self, request_id: str) -> bool:
         req = self._pending_approvals.pop(request_id, None)
         if req:
-            logger.info("Denied: %s", request_id)
+            logger.info("Denied: %s — %s", request_id, req["tool_name"])
             return False
         return False
