@@ -205,15 +205,19 @@ class ConversationService:
             title = title.replace("  ", " ")
 
         title = title.strip(" '\"`.,!?;:")
-
         if not title:
             return "New Conversation"
 
+        title = title[0].upper() + title[1:] if title else title
+
         if title.lower().startswith("what") or title.lower().startswith("how"):
-            words = title.split()
-            if len(words) <= 3:
-                pass
-            elif title.endswith("?"):
+            expanded = title.lower().replace("what's", "what is").replace("how's", "how is")
+            if expanded != title.lower():
+                words = expanded.split()
+            else:
+                words = title.split()
+
+            if len(words) > 3 and title.endswith("?"):
                 noun_idx = 1
                 for skip_word in ("is", "are", "was", "were", "does", "do", "can",
                                    "would", "could", "should", "will", "shall",
@@ -221,14 +225,25 @@ class ConversationService:
                     if noun_idx < len(words) and words[noun_idx].lower() == skip_word:
                         noun_idx += 1
                 if noun_idx < len(words):
-                    title = " ".join(words[noun_idx:]).rstrip("?").strip()
+                    extracted = " ".join(words[noun_idx:]).rstrip("?").strip()
+                    if len(extracted) < len(title) * 0.7:
+                        title = extracted[0].upper() + extracted[1:] if extracted else title
 
         if title.endswith("?"):
             title = title.rstrip("?").strip()
             words = title.split()
             if len(words) >= 3:
-                title = words[0] if words[0].lower() in (
-                    "what", "how", "why", "when", "where", "who") else " ".join(words[:2])
+                only_question_word = words[0].lower() in (
+                    "what", "how", "why", "when", "where", "who")
+                if only_question_word:
+                    noun_idx = 1
+                    for skip_word in ("is", "are", "was", "were", "does", "do",
+                                       "the", "a", "an"):
+                        if noun_idx < len(words) and words[noun_idx].lower() == skip_word:
+                            noun_idx += 1
+                    if noun_idx < len(words):
+                        title = " ".join(words[noun_idx:])
+                        title = title[0].upper() + title[1:] if title else title
 
         if len(title) > MAX_TITLE_LENGTH:
             title = title[:MAX_TITLE_LENGTH - 3].rstrip() + "..."
